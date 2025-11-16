@@ -84,7 +84,7 @@ def UnitCovert(unit: FlattenUnitData, target_root: Path, extra: dict | None = No
     if not target_path.npy_file.exists():
         t_us = imu_data.t_us.reshape(-1, 1)
 
-        ahrs = imu_data.unit_ahrs
+        ahrs = imu_data.ahrs_qs
         ahrs_Rs = np.array([it.rotation_matrix for it in ahrs])
 
         # R_WI = np.array(map(cvt, gt_qs))

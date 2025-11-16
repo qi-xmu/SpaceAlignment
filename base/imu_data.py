@@ -1,10 +1,11 @@
 from pathlib import Path
+from typing import final
+
 import numpy as np
 import pandas as pd
-from typing import final
 from pyquaternion import Quaternion
 
-from .datatype import CalibrationSeries
+from .datatype import TimePoseSeries
 
 
 @final
@@ -16,8 +17,8 @@ class IMUData:
         self.t_us = np.array([])
         self.gyro = np.array([])
         self.acce = np.array([])
-        self.ahrs = np.array([])
-        self.unit_ahrs: list[Quaternion] = []
+        self.raw_ahrs = np.array([])
+        self.ahrs_qs: list[Quaternion] = []
         self.t_us_f0 = np.array([])
         self.t_sys_us = np.array([])
         self.imu_freq: float = 0.0
@@ -34,10 +35,10 @@ class IMUData:
         self.t_us = self.raw_data[:, 0]
         self.gyro = self.raw_data[:, 1:4]  # angular velocity
         self.acce = self.raw_data[:, 4:7]  # linear acceleration
-        self.ahrs = self.raw_data[:, 7:11]  # orientation
+        self.raw_ahrs = self.raw_data[:, 7:11]  # orientation
 
         # Convert quaternions to unit quaternions
-        self.unit_ahrs = [Quaternion(q).unit for q in self.ahrs]
+        self.ahrs_qs = [Quaternion(q).unit for q in self.raw_ahrs]
 
         if len(self.t_us) > 1:
             self.t_us_f0 = self.t_us - self.t_us[0]
@@ -55,13 +56,21 @@ class IMUData:
         else:
             print("Warning: Not enough data points to calculate frequency")
 
-    def get_calibr_series(self, ts=None) -> CalibrationSeries:
-        return CalibrationSeries(
-            times=self.t_us,
-            rots=[q.rotation_matrix for q in self.unit_ahrs],
-            trs=ts if ts is not None else [
-                np.zeros(3) for _ in range(len(self.unit_ahrs))],
+    def get_time_pose_series(self, max_idx: int | None = None) -> TimePoseSeries:
+        return TimePoseSeries(
+            ts=self.t_sys_us[:max_idx],
+            qs=self.ahrs_qs[:max_idx],
+            ps=np.zeros((len(self.ahrs_qs[:max_idx]), 3)),
         )
+
+    def transform_to_world(
+        self, *, rots: np.ndarray | None = None, qs: list[Quaternion] | None = None
+    ):
+        if rots is None and qs is not None:
+            rots = np.array([q.rotation_matrix for q in qs])
+
+        self.world_acce = np.einsum("ijk,ik->ij", rots, self.acce)  # type: ignore
+        self.world_gyro = np.einsum("ijk,ik->ij", rots, self.gyro)  # type: ignore
 
     def format_to_spec(self, target_freq: int = 200) -> None:
         """Format data to specified frequency (placeholder method)."""

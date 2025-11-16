@@ -1,11 +1,13 @@
+import sqlite3
+import struct
+import zlib
 from pathlib import Path
+
 import numpy as np
 import pandas as pd
 from pyquaternion import Quaternion
-import sqlite3
-import zlib
-import struct
-from .datatype import CalibrationSeries
+
+from .datatype import CalibrationData, TimePoseSeries
 
 
 def decompress_and_parse_data(blob_data) -> bytes | None:
@@ -78,22 +80,24 @@ def unpack_pose_data(blob_data):
 
 
 class RTABData:
-    def __init__(self, file_path: str | Path, id=None):
-        self.id = id
+    def __init__(
+        self, file_path: str | Path, calibr_data: CalibrationData | None = None
+    ):
         self.file_path = str(file_path)
+        self.calibr_data = calibr_data
 
         self.opt_ids: list[int] = []
-        self.opt_ps: list[np.ndarray] = []
         self.opt_qs: list[Quaternion] = []
-        self.opt_t_us:  np.ndarray
-        self.node_t_us:  np.ndarray
-        self.node_t_us_f0: np.ndarray
+        self.opt_ps: np.ndarray
+        self.opt_t_us: np.ndarray
+
+        self.node_t_us: np.ndarray
+        self.t_us_f0: np.ndarray
         self.node_ids: list[int] = []
         self.node_qs: list[Quaternion] = []
-        self.node_ps: list[np.ndarray] = []
+        self.node_ps: np.ndarray
 
-        assert self.file_path.endswith(
-            ".db"), "RTAB-Map data file must be a .db file"
+        assert self.file_path.endswith(".db"), "RTAB-Map data file must be a .db file"
 
         # 从数据库中加载
         self.conn = sqlite3.connect(self.file_path)
@@ -114,15 +118,20 @@ class RTABData:
             "Failed to decompress admin_opt_poses data"
         )
 
+        opt_ps = []
         for pose_values in struct.iter_unpack("12f", decompressed_data):
             pose_matrix = np.array(pose_values).reshape(3, 4)
 
-            p = pose_matrix[:3, 3]
             R = pose_matrix[:3, :3]
+            p = pose_matrix[:3, 3]
             unit_q = rotation_matrix_to_quaternion(R).unit
-            self.opt_ps.append(p)
+            opt_ps.append(p)
             self.opt_qs.append(unit_q)
 
+            # calibr
+            if self.calibr_data:
+                pass
+        self.opt_ps = np.array(opt_ps)
         # 查询Admin表中的 opt_ids 数据
         admin_opt_ids = self.cursor.execute(
             "SELECT opt_ids FROM Admin WHERE opt_ids IS NOT NULL"
@@ -145,7 +154,7 @@ class RTABData:
             opt_t_us.append(t)
 
         self.opt_t_us = np.array(opt_t_us)
-        print(f"Loaded {len(self.opt_ids)} optimized poses from the database.")
+        # print(f"Loaded {len(self.opt_ids)} optimized poses from the database.")
 
     def load_node_data(self):
         results = self.cursor.execute("""
@@ -158,6 +167,7 @@ class RTABData:
         assert results, "No node data found in the database."
 
         node_t_us = []
+        node_ps = []
         for node_id, stamp, pose_blob in results:
             pose = unpack_pose_data(pose_blob)
             if pose is None:
@@ -166,22 +176,29 @@ class RTABData:
             p, unit_q = pose
             self.node_ids.append(node_id)
             node_t_us.append(int(stamp * 1e6))  # convert to us
-            self.node_ps.append(p)
+            node_ps.append(p)
             self.node_qs.append(unit_q)
 
         self.node_t_us = np.array(node_t_us)
-        self.node_t_us_f0 = self.node_t_us - self.node_t_us[0]
+        self.node_ps = np.array(node_ps)
+        self.t_us_f0 = self.node_t_us - self.node_t_us[0]
         self.node_freq = 1e6 / np.mean(np.diff(self.node_t_us))
-        print(
-            f"Loaded {len(self.node_ids)} nodes witch Freq: {self.node_freq} from the database."
+        # print(
+        #     f"Loaded {len(self.node_ids)} nodes witch Freq: {self.node_freq} from the database."
+        # )
+
+    def get_time_pose_series(self, max_idx: int | None = None) -> TimePoseSeries:
+        return TimePoseSeries(
+            ts=self.node_t_us[:max_idx],
+            qs=self.node_qs[:max_idx],
+            ps=self.node_ps[:max_idx],
         )
 
-    def get_calibr_series(self) -> CalibrationSeries:
-        return CalibrationSeries(
-            times=self.node_t_us,
-            rots=[q.rotation_matrix for q in self.node_qs],
-            trs=self.node_ps
-        )
+    def fix_time(self, t_21_us: int):
+        t_21_us = int(t_21_us)
+        self.node_t_us += t_21_us
+        self.t_us_f0 += t_21_us
+        self.opt_t_us += t_21_us
 
     def save_data(self, name, data):
         pass
@@ -197,8 +214,7 @@ class RTABData:
             ps = np.array(self.opt_ps)
             ax.plot(ps[0, 0], ps[0, 1], "o", color="g", label="Start")
             ax.plot(ps[-1, 0], ps[-1, 1], "x", color="r", label="End")
-            ax.plot(ps[:, 0], ps[:, 1],
-                    label="Optimized Trajectory", color="b")
+            ax.plot(ps[:, 0], ps[:, 1], label="Optimized Trajectory", color="b")
 
             node_ps = np.array(self.node_ps)
             ax.plot(node_ps[0, 0], node_ps[0, 1], "o", color="g")
@@ -213,7 +229,7 @@ class RTABData:
 
             ax.set_xlabel("X (m)")
             ax.set_ylabel("Y (m)")
-            ax.set_title(f"{self.id} Trajectory")
+            ax.set_title(f"{self.file_path} Trajectory")
             ax.grid(True)
             ax.set_aspect("equal", "box")
             # 设置 字体大小
@@ -222,7 +238,7 @@ class RTABData:
                 plt.show()
 
             if save_path:
-                plt.savefig(save_path, dpi=300)
+                fig.savefig(save_path, dpi=300)
         except ImportError:
             print("matplotlib is required for drawing the trajectory.")
 
@@ -240,11 +256,11 @@ class RTABData:
         ]
         qs = np.array([q.elements for q in self.node_qs])
 
-        data = np.concatenate([self.node_t_us_f0.reshape(-1, 1),
-                               self.node_ps, qs], axis=1)
+        data = np.concatenate([self.t_us_f0.reshape(-1, 1), self.node_ps, qs], axis=1)
 
         pd.DataFrame(data, columns=header).to_csv(
-            path, index=False, float_format="%.8f")
+            path, index=False, float_format="%.8f"
+        )
         print(f"Saved {len(self.node_ids)} poses to {path}")
 
 

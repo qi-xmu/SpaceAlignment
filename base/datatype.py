@@ -1,17 +1,22 @@
-import numpy as np
+import json
+import os
 from dataclasses import dataclass
 from pathlib import Path
-import json
 from typing import Literal
-import os
 
-SceneType = Literal["in", 'out']  # 场景类型，in 表示室内场景，out 表示室外场景
+import numpy as np
+from pyquaternion import Quaternion
+
+Pose = tuple[np.ndarray | None, np.ndarray | None]
+Poses = tuple[list[np.ndarray], list[np.ndarray]]
+Time = np.ndarray
+
+SceneType = Literal["in", "out"]  # 场景类型，in 表示室内场景，out 表示室外场景
 DeviceType = Literal[
-    "SM-G9900",         # 三星 FE 21 5G
-    "Redmi K30 Pro",    # 红米 k30 pro
-    "ABR-AL60"          # 华为 Mate 60e
+    "SM-G9900",  # 三星 FE 21 5G
+    "Redmi K30 Pro",  # 红米 k30 pro
+    "ABR-AL60",  # 华为 Mate 60e
 ]
-Pose = tuple[np.ndarray, np.ndarray]
 
 
 @dataclass
@@ -65,7 +70,9 @@ class GroupData:
                 _, device_type = name.split("_")
                 self.calibr_files[device_type] = item
 
-        assert self.raw_calibr_path is not None, f"No raw_calibr_path found in {base_dir}"
+        assert self.raw_calibr_path is not None, (
+            f"No raw_calibr_path found in {base_dir}"
+        )
 
 
 @dataclass
@@ -94,7 +101,7 @@ class FlattenUnitData(UnitData):
         self.group_id = group.group_id
         self.scene_type = group.scene_type
         self.calibr_file = group.calibr_files[unit.device_type]
-        self.calibr_data = CalibrationData(self.calibr_file)
+        self.calibr_data = CalibrationData.from_json(self.calibr_file)
 
         super().__init__(unit.cam_path.parent)
 
@@ -108,22 +115,30 @@ class FlattenUnitData(UnitData):
         return R_gc, t_gc
 
 
-@dataclass
-class CalibrationSeries:
+class TimePoseSeries:
     """
     CalibrationSeries 类用于存储一系列的校准数据，包括时间戳、旋转矩阵和平移向量
     """
-    # timestampe in us
-    times: list[int] | np.ndarray
-    rots: list[np.ndarray]
-    trs: list[np.ndarray]
 
-    def get_match(self, matches, index=0, inverse=False):
+    # timestampe in us
+    ts_us: Time
+    qs: list[Quaternion]
+    ps: np.ndarray
+
+    def __init__(self, ts: Time, qs: list[Quaternion], ps: np.ndarray):
+        self.ts_us = ts
+        self.qs = qs
+        self.ps = ps
+
+    def __len__(self) -> int:
+        return len(self.ts_us)
+
+    def get_match(self, matches, *, index=0, inverse=False) -> Poses:
         Rs = []
         ts = []
         for match in matches:
-            rot = self.rots[match[index]]
-            tr = self.trs[match[index]]
+            rot = self.qs[match[index]].rotation_matrix
+            tr = self.ps[match[index]]
             if inverse:
                 rot = rot.T
                 tr = -rot @ tr
@@ -131,18 +146,136 @@ class CalibrationSeries:
             ts.append(tr)
         return Rs, ts
 
+    def match_series(self, matches, index=0) -> "TimePoseSeries":
+        ts = []
+        qs = []
+        ps = []
+        for match in matches:
+            ts.append(self.ts_us[match[index]])
+            qs.append(self.qs[match[index]])
+            ps.append(self.ps[match[index]])
+        ts = np.array(ts)
+        ps = np.array(ps)
+        return TimePoseSeries(ts, qs, ps)
+
 
 @dataclass
 class CalibrationData:
-    rot_sensor_gt: np.ndarray
-    tr_sensor_gt: np.ndarray
-    rot_ref_sensor_gt: np.ndarray
-    tr_ref_sensor_gt: np.ndarray
+    rot_sensor_gt: np.ndarray | None
+    tr_sensor_gt: np.ndarray | None
+    rot_ref_sensor_gt: np.ndarray | None
+    tr_ref_sensor_gt: np.ndarray | None
 
-    def __init__(self, json_path: Path):
-        with open(json_path, "r") as f:
-            data = json.load(f)
-            self.rot_sensor_gt = np.array(data["rot_sensor_gt"])
-            self.tr_sensor_gt = np.array(data["tr_sensor_gt"])
-            self.rot_ref_sensor_gt = np.array(data["rot_ref_sensor_gt"])
-            self.tr_ref_sensor_gt = np.array(data["tr_ref_sensor_gt"])
+    err_sensor_gt: tuple | None
+    err_ref_sensor_gt: tuple | None
+
+    _file_path: Path | None = None
+
+    def __init__(
+        self,
+        rot_sensor_gt: np.ndarray | None = None,
+        tr_sensor_gt: np.ndarray | None = None,
+        rot_ref_sensor_gt: np.ndarray | None = None,
+        tr_ref_sensor_gt: np.ndarray | None = None,
+        err_sensor_gt: tuple | None = None,
+        err_ref_sensor_gt: tuple | None = None,
+        file_path: Path | None = None,
+    ):
+        self.rot_sensor_gt = rot_sensor_gt
+        self.tr_sensor_gt = tr_sensor_gt
+        self.rot_ref_sensor_gt = rot_ref_sensor_gt
+        self.tr_ref_sensor_gt = tr_ref_sensor_gt
+        self.err_sensor_gt = err_sensor_gt
+        self.err_ref_sensor_gt = err_ref_sensor_gt
+        self._file_path = file_path
+
+    @property
+    def rot_gt_sensor(self) -> np.ndarray | None:
+        if self.rot_sensor_gt is None:
+            return None
+        return self.rot_sensor_gt.T
+
+    @property
+    def tr_gt_sensor(self) -> np.ndarray | None:
+        if self.tr_sensor_gt is None or self.rot_sensor_gt is None:
+            return None
+        return -self.rot_sensor_gt.T @ self.tr_sensor_gt
+
+    @property
+    def rot_ref_gt_sensor(self) -> np.ndarray | None:
+        if self.rot_ref_sensor_gt is None:
+            return None
+        return self.rot_ref_sensor_gt.T
+
+    @property
+    def tr_ref_gt_sensor(self) -> np.ndarray | None:
+        if self.tr_ref_sensor_gt is None or self.rot_ref_sensor_gt is None:
+            return None
+        return -self.rot_ref_sensor_gt.T @ self.tr_ref_sensor_gt
+
+    @staticmethod
+    def from_json(json_path: Path | None) -> "CalibrationData":
+        if json_path is None:
+            return CalibrationData(
+                rot_sensor_gt=np.eye(3),
+                tr_sensor_gt=np.zeros(3),
+                rot_ref_sensor_gt=np.eye(3),
+                tr_ref_sensor_gt=np.zeros(3),
+            )
+        else:
+            with open(json_path, "r") as f:
+                data = json.load(f)[0]
+                return CalibrationData(
+                    rot_sensor_gt=np.array(data["rot_sensor_gt"]),
+                    tr_sensor_gt=np.array(data["trans_sensor_gt"]).flatten(),
+                    rot_ref_sensor_gt=np.array(data["rot_ref_sensor_gt"]),
+                    tr_ref_sensor_gt=np.array(data["trans_ref_sensor_gt"]).flatten(),
+                    file_path=json_path,
+                )
+
+    def to_json(self, json_path: Path | str, notes_ext: str = "") -> None:
+        rot_sensor_gt = (
+            self.rot_sensor_gt.tolist() if self.rot_sensor_gt is not None else ""
+        )
+        rot_ref_sensor_gt = (
+            self.rot_ref_sensor_gt.tolist()
+            if self.rot_ref_sensor_gt is not None
+            else ""
+        )
+        tr_sensor_gt = (
+            self.tr_sensor_gt.tolist() if self.tr_sensor_gt is not None else ""
+        )
+        tr_ref_sensor_gt = (
+            self.tr_ref_sensor_gt.tolist() if self.tr_ref_sensor_gt is not None else ""
+        )
+        err_sensor_gt = (
+            list(self.err_sensor_gt) if self.err_sensor_gt is not None else []
+        )
+        err_ref_sensor_gt = (
+            list(self.err_ref_sensor_gt) if self.err_ref_sensor_gt is not None else []
+        )
+
+        notes = (
+            "Pose: Sensor_Groundtruth,Error: [mean_rot_err, mean_trans_err, max_rot_err, max_trans_err]. "
+            + notes_ext
+        )
+
+        with open(json_path, "w") as f:
+            json.dump(
+                [
+                    {
+                        "rot_sensor_gt": rot_sensor_gt,
+                        "trans_sensor_gt": tr_sensor_gt,
+                        "rot_ref_sensor_gt": rot_ref_sensor_gt,
+                        "trans_ref_sensor_gt": tr_ref_sensor_gt,
+                        "err_sensor_gt": err_sensor_gt,
+                        "err_ref_sensor_gt": err_ref_sensor_gt,
+                        "file_path": str(json_path),
+                        "notes": notes,
+                    }
+                ],
+                f,
+                indent=4,
+                ensure_ascii=False,
+            )
+            print(f"标定结果已保存到: {json_path}")

@@ -1,22 +1,42 @@
-from itertools import accumulate
-from base import RTABData, UnitPath, FilePath, PERSON_LIST, IMUData
 import numpy as np
 from pyquaternion import Quaternion
 
+from base import PERSON_LIST, FilePath, IMUData, RTABData, UnitPath
+from base.arcore_data import ARCoreData
+from base.interpolate import get_time_series, pose_interpolate
+from base.space import transform_local, transform_world
 
-points = [1, 2, 3, 4]
-paths = []
-path = []
+if __name__ == "__main__":
+    fp = FilePath("./dataset", PERSON_LIST)
+    flatten = fp.flatten()
+    flatten0 = flatten[0]
 
-for p in points:
-    path.append(p)
-    paths.append(path.copy())
+    imu_data = IMUData(flatten0.imu_path)
+    cam_data = ARCoreData(flatten0.cam_path)
+    gt_data = RTABData(flatten0.gt_path)
 
-print(paths)
+    t_new_us = get_time_series([imu_data.t_sys_us, gt_data.node_t_us])
 
-points = [1, 2, 3, 4]
-paths = list(accumulate(points, lambda acc, x: acc + [x], initial=[]))[1:]
-print(paths)
+    pose_interpolate(
+        cs=gt_data.get_time_pose_series(),
+        t_new_us=t_new_us,
+    )
+    exit()
+
+
+# points = [1, 2, 3, 4]
+# paths = []
+# path = []
+
+# for p in points:
+#     path.append(p)
+#     paths.append(path.copy())
+
+# print(paths)
+
+# points = [1, 2, 3, 4]
+# paths = list(accumulate(points, lambda acc, x: acc + [x], initial=[]))[1:]
+# print(paths)
 
 
 # p = np.array([1, 2, 3])
@@ -31,7 +51,7 @@ print(paths)
 # flatten0 = flatten[0]
 # # print(flatten0)
 
-# imu_data = IMUData(flatten0.imu_path.as_posix())
+#
 
 # a0 = imu_data.acce[0]
 # q0 = imu_data.unit_ahrs[0]

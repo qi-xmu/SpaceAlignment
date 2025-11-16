@@ -1,9 +1,22 @@
-import os
-import json
-import numpy as np
+from pathlib import Path
+
 import cv2
-from base import CalibrationSeries, Pose
-import TimeMatch
+import numpy as np
+import rerun as rr
+
+import rerun_ext.rerun_calibration as rrec
+import time_matching
+from base import (
+    ARCoreData,
+    CalibrationData,
+    GroupData,
+    IMUData,
+    Pose,
+    Poses,
+    RTABData,
+    TimePoseSeries,
+    UnitPath,
+)
 
 
 class HandEyeAlg:
@@ -28,24 +41,41 @@ def compose_transform(R1, t1, R2, t2) -> tuple[np.ndarray, np.ndarray]:
 
 
 def calibrate_pose_gripper_camera(
-    poses_base_gripper,
-    poses_camera_target,
+    poses_base_gripper: Poses,
+    poses_camera_target: Poses,
     pose_camera_gripper=(None, None),
-    alg=HandEyeAlg.Park
-) -> tuple[np.ndarray, np.ndarray]:
+    alg=HandEyeAlg.Park,
+    rot_only=False,
+) -> Pose:
     """calibrateHandEye return R_gc, t_gc
     隐含信息：base 和 target 为刚体，gripper 和 camera 为刚体。
     """
     # 标定
+    if rot_only:
+        poses_base_gripper = (
+            poses_base_gripper[0],
+            [np.zeros(3) for _ in range(len(poses_base_gripper[1]))],
+        )
+        poses_camera_target = (
+            poses_camera_target[0],
+            [np.zeros(3) for _ in range(len(poses_camera_target[1]))],
+        )
+
     R_gc, t_gc = cv2.calibrateHandEye(
         *poses_base_gripper,
         *poses_camera_target,
         *pose_camera_gripper,
         method=alg,
     )
-    print("旋转矩阵:\n", R_gc)
-    print("位移:\n", t_gc.flatten())
-    return R_gc, t_gc
+    rvec = cv2.Rodrigues(R_gc)[0]
+    ang = np.linalg.norm(rvec)
+    if ang != 0:
+        rvec = rvec / ang
+    print("旋转向量: ", rvec.flatten(), ang * 180 / np.pi)
+    print("位移: ", t_gc.flatten())
+    if rot_only:
+        return R_gc, None
+    return R_gc, t_gc.flatten()
 
 
 # %% 误差评估
@@ -95,81 +125,154 @@ def _transform_error(RA, tA, RB, tB, RX, tX):
 
 def calibrate_b1_b2(
     *,
-    cs_ref1_body1: CalibrationSeries,
-    cs_ref2_body2: CalibrationSeries,
-    result_path=None
+    cs_ref1_body1: TimePoseSeries,
+    cs_ref2_body2: TimePoseSeries,
+    calibr_data: CalibrationData = CalibrationData(),
+    is_t_diff=True,
+    show_t_diff=False,
+    rot_only=False,
 ):
-    ts1 = cs_ref1_body1.times
-    ts2 = cs_ref2_body2.times
-
     # 时间匹配，生成 索引对 (idx_ts1, idx_ts2, time_diff_us)
-    matches = TimeMatch.match(ts1, ts2)
-
+    matches, t_21_us = time_matching.nearest_match(
+        cs_ref1_body1, cs_ref2_body2, is_t_diff=is_t_diff, show_t_diff=show_t_diff
+    )
+    print("> 计算刚体之间的变换：")
     poses_ref1_body1 = cs_ref1_body1.get_match(matches, index=0)
     poses_body2_ref2 = cs_ref2_body2.get_match(matches, index=1, inverse=True)
     pose_body1_body2 = calibrate_pose_gripper_camera(
-        poses_ref1_body1, poses_body2_ref2)
-    err_b1_b2 = evaluate(pose_body1_body2, poses_ref1_body1, poses_body2_ref2)
+        poses_ref1_body1,
+        poses_body2_ref2,
+        (calibr_data.rot_sensor_gt, calibr_data.tr_sensor_gt),
+        rot_only=rot_only,
+    )
+    err_b1_b2 = evaluate(
+        pose_body1_body2, poses_ref1_body1, poses_body2_ref2, rot_only=rot_only
+    )
     poses_ref1_body1, poses_body2_ref2 = None, None
 
+    print("> 计算参考坐标系之间的变换：")
     poses_body1_ref1 = cs_ref1_body1.get_match(matches, index=0, inverse=True)
     poses_ref2_body2 = cs_ref2_body2.get_match(matches, index=1)
     pose_ref1_ref2 = calibrate_pose_gripper_camera(
-        poses_body1_ref1, poses_ref2_body2)
-    err_r1_r2 = evaluate(pose_ref1_ref2, poses_body1_ref1, poses_ref2_body2)
+        poses_body1_ref1,
+        poses_ref2_body2,
+        (calibr_data.rot_ref_sensor_gt, calibr_data.tr_ref_sensor_gt),
+        rot_only=rot_only,
+    )
+    err_r1_r2 = evaluate(
+        pose_ref1_ref2, poses_body1_ref1, poses_ref2_body2, rot_only=rot_only
+    )
     poses_body1_ref1, poses_ref2_body2 = None, None
 
-    if result_path:
-        calibrate_json(
-            result_path,
-            pose_body1_body2,
-            err_b1_b2,
-            pose_ref1_ref2,
-            err_r1_r2
-        )
-    return pose_body1_body2, pose_ref1_ref2, matches
+    cd = CalibrationData(
+        *pose_body1_body2,
+        *pose_ref1_ref2,
+        err_b1_b2,
+        err_r1_r2,
+    )
+    return cd, matches
 
 
-def evaluate(pose_gc, poses_bg, poses_ct):
+def evaluate(pose_gc: Pose, poses_bg, poses_ct, *, rot_only=False):
     rot_errors = []
     trans_errors = []
+    if rot_only:
+        pose_gc = pose_gc[0], np.zeros(3)
     for RA, tA, RB, tB in zip(*_get_A_B(*poses_bg, *poses_ct)):
-        deg, trans = _transform_error(RA, tA, RB, tB,  *pose_gc)
+        deg, trans = _transform_error(RA, tA, RB, tB, *pose_gc)
         rot_errors.append(deg)
         trans_errors.append(trans)
 
     meas_err = np.mean(rot_errors), np.mean(trans_errors)
     max_err = np.max(rot_errors), np.max(trans_errors)
 
-    print("旋转误差（度）: {:.4f} 平移误差（米）: {:.5f}".format(*meas_err))
-    print("最大旋转误差（度）: {:.4f} 最大平移误差（米）: {:.5f}".format(*max_err))
+    print("平均误差 旋转（度）/ 平移（米）: {:.5f} / {:.5f}".format(*meas_err))
+    print("最大误差 旋转（度）/ 平移（米）: {:.5f} / {:.5f}".format(*max_err))
     return meas_err, max_err
 
 
-def calibrate_json(result_file: str, pose_b1_b2: Pose, err_b1_b2, pose_r1_r2: Pose, err_r1_r2, is_save=True):
-    # 检查文件是否存在，如果存在，则读取 notes
-    notes = """Pose: Sensor_Groundtruth
-Error: [mean_rot_err, mean_trans_err, max_rot_err, max_trans_err]
-"""
-    # 准备保存的数据
-    result_data = {
-        "dataset": str(result_file),
-        "rot_sensor_gt": pose_b1_b2[0].tolist(),
-        "trans_sensor_gt": pose_b1_b2[1].flatten().tolist(),
-        "rot_sensor_gt_err": list(err_b1_b2),
-        "rot_ref_sensor_gt": pose_r1_r2[0].tolist(),
-        "trans_ref_sensor_gt": pose_r1_r2[1].flatten().tolist(),
-        "rot_ref_sensor_gt_err": list(err_r1_r2),
-        "notes": notes,
-    }
-    if is_save:
-        # 保存到JSON文件
-        with open(result_file, "w", encoding="utf-8") as f:
-            json.dump([result_data], f, indent=4, ensure_ascii=False)
-        print(f"标定结果已保存到: {result_file}")
-
-    return result_data
+def calibrate_sensor_camera(cam_data: ARCoreData):
+    cs_sensor = cam_data.get_time_pose_series(using_cam=False)
+    cs_camera = cam_data.get_time_pose_series(using_cam=True)
+    print("--------------- 计算 Sensor - Camera")
+    cs_sc, _ = calibrate_b1_b2(
+        cs_ref1_body1=cs_sensor,
+        cs_ref2_body2=cs_camera,
+    )
+    return cs_sc
 
 
-if __name__ == "__main__":
-    pass
+def calibrate_unit(
+    path: Path | str,
+    *,
+    using_cam: bool = True,
+    using_rerun: bool = True,
+):
+    print(f"Calibrating {path}")
+    path = Path(path)
+    fp = UnitPath(path)
+    imu_data = IMUData(fp.imu_path)
+    gt_data = RTABData(fp.gt_path)
+
+    cs_i = imu_data.get_time_pose_series()
+    cs_g = gt_data.get_time_pose_series()
+
+    if using_cam:
+        cam_data = ARCoreData(fp.cam_path, z_up=False)
+        calibrate_sensor_camera(cam_data)
+
+        cs_c = cam_data.get_time_pose_series()
+        # 如果使用 Cam 进行数据标定，则先计算 Cam 和 GT 的标定关系，然后计算 AHRS 和 Cam 的关系。
+        # GT - Cam 存在世界坐标系和刚体旋转关系
+        # Cam - AHRS 之间只存在世界坐标系的旋转关系。
+        print("------------- 计算 Sensor - GT ")
+        cd_cg, matches = calibrate_b1_b2(
+            cs_ref1_body1=cs_c,
+            cs_ref2_body2=cs_g,
+            rot_only=False,
+        )
+        print("------------- 计算 AHRS - Sensor")
+        cd_ic, _ = calibrate_b1_b2(
+            cs_ref1_body1=cs_i,
+            cs_ref2_body2=cs_c,
+            rot_only=True,
+        )
+        # 此处计算的 [rot_sensor_gt] 和 [cd_ic.tr_sensor_gt] 应该接近单位变换。
+
+        calibr_data = cd_cg
+        assert cd_ic.rot_ref_sensor_gt is not None
+        # 公式 R_ig = R_ic @ R_cg, t_ig = R_ic @ t_cg
+        calibr_data.rot_ref_sensor_gt = (
+            cd_ic.rot_ref_sensor_gt @ cd_cg.rot_ref_sensor_gt
+        )
+        calibr_data.tr_ref_sensor_gt = cd_ic.rot_ref_sensor_gt @ cd_cg.tr_ref_sensor_gt
+        notes = "使用相机"
+
+        if using_rerun:
+            rrec.rerun_init(path.name)
+            rrec.send_imu_cam_data(imu_data, cam_data, cd_ic)
+            rrec.send_gt_data(gt_data, calibr_data)
+    else:
+        cd_ig, _ = calibrate_b1_b2(
+            cs_ref1_body1=cs_i,
+            cs_ref2_body2=cs_g,
+            rot_only=True,
+        )
+        calibr_data = cd_ig
+        notes = "未使用相机，为标定位移"
+
+        if using_rerun:
+            rrec.rerun_init(path.name)
+            rrec.send_imu_cam_data(imu_data)
+            rrec.send_gt_data(gt_data, calibr_data)
+
+    calibr_data.to_json(fp.calibr_file, notes)
+    rr.save(fp.target("data.rrd"))
+    return calibr_data
+
+
+def calibrate_group(path):
+    gp = GroupData(path)
+    for unit in gp.raw_calibr_path.iterdir():
+        if unit.is_dir():
+            calibrate_unit(unit)

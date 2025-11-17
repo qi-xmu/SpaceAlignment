@@ -45,7 +45,7 @@ class ARCoreData:
         if self.extend:
             self.raw_cam_ps = self.raw_data[:, 8:11]
             self.raw_cam_qs = self.raw_data[:, 11:15]
-            self.t_sys_us = self.raw_data[:, 15].astype(np.int64)
+            self.t_sys_us = self.raw_data[:, 15]
 
             self.cam_ps = self._transform_world(self.raw_cam_ps)
             self.cam_qs = self._to_q_obj(self.raw_cam_qs)

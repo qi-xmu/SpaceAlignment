@@ -286,7 +286,8 @@ def calibrate_unit(
             rrec.send_gt_data(gt_data, cd)
 
     cd.to_json(unit.calibr_file, notes)
-    rr.save(unit.target("data.rrd"))
+    if using_rerun:
+        rr.save(unit.target("data.rrd"))
     return cd
 
 

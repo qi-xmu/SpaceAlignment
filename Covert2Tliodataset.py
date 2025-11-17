@@ -4,11 +4,9 @@
 import argparse
 import json
 from pathlib import Path
-from typing import Literal
 
 import numpy as np
 import pandas as pd
-from pyquaternion import Quaternion
 
 from base import (
     Dataset,
@@ -49,23 +47,6 @@ JSON_TEMP = {
 }
 
 
-class GroundtruthData(RTABData):
-    def __init__(self, file_path) -> None:
-        super().__init__(file_path)
-
-    def upsample(
-        self, ts_us: np.ndarray, type: Literal["pos", "node_quat", "opt_quat"]
-    ) -> np.ndarray:
-        def _sample_quat(ts_us: np.ndarray, qs: list[Quaternion]) -> np.ndarray:
-            qs_resampled = []
-            q = Quaternion.slerp(qs[0], qs[1])
-
-            qs_resampled.append(q)
-            return np.array(qs_resampled)
-
-        return np.array([])
-
-
 class TargetPaths:
     def __init__(self, target_root: Path) -> None:
         target_root.mkdir(parents=True, exist_ok=True)
@@ -85,7 +66,7 @@ def UnitCovert(
 ):
     target_path = TargetPaths(target_root)
     imu_data = IMUData(unit.imu_path)
-    gt_data = GroundtruthData(unit.gt_path)
+    gt_data = RTABData(unit.gt_path)
     cd = load_calibration_data(unit=unit)
 
     # 使用csv存储原始数据
@@ -140,22 +121,30 @@ def UnitCovert(
             json.dump(json_info, f, indent=4)
             print(f"Save {json_info}")
 
+    return gt_data.t_len_s
+
 
 if __name__ == "__main__":
     arg_parser = argparse.ArgumentParser()
     arg_parser.add_argument("-d", "--dataset", type=str)
     arg_parser.add_argument("-t", "--target", type=str)
+    arg_parser.add_argument("-r", "--regen", action="store_true")
 
     args = arg_parser.parse_args()
     dataset_path = Path(args.dataset)
     target_path = Path(args.target)
+    regen = args.regen
 
     if not target_path.exists():
         target_path.mkdir(parents=True)
 
-    fp = Dataset(dataset_path, ["001"])
-    flatten_data = fp.flatten()
-    for i, flatten0 in enumerate(flatten_data):
-        print(i, "...")
-        UnitCovert(flatten0, target_root=target_path.joinpath(flatten0.data_id))
-    print("Done")
+    ds = Dataset(dataset_path)
+    flatten_data = ds.flatten()
+    t_len_all_s = 0.0
+    for idx, flatten0 in enumerate(flatten_data):
+        print(f"\n{idx}.", flatten0.data_id, ":", flatten0.base_dir)
+        t_len_s = UnitCovert(
+            flatten0, target_root=target_path.joinpath(flatten0.data_id), regen=regen
+        )
+        t_len_all_s += t_len_s
+    print(f"Done， 数据集总时间： {t_len_all_s / 60:.2f}分钟")

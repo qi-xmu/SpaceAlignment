@@ -114,9 +114,12 @@ class RTABData:
         self.t_us_f0 = self.node_t_us - self.node_t_us[0]
         self.t_sys_us = self.node_t_us
         self.node_freq = 1e6 / np.mean(np.diff(self.node_t_us))
-        print(
-            f"Loaded {len(self.node_ids)} nodes, {len(self.opt_ids)} optimized witch Freq: {self.node_freq} from the database. "
-        )
+        # print(
+        #     f"Loaded {len(self.node_ids)} nodes, {len(self.opt_ids)} optimized witch Freq: {self.node_freq:.2f} from the database. "
+        # )
+        # 数据集时长
+        self.t_len_s = (self.node_t_us[-1] - self.node_t_us[0]) / 1e6
+        print(f"数据集时长：{self.t_len_s:.2f} 秒")
 
     def load_csv_data(self):
         # #timestamp [us],p_RN_x [m],p_RN_y [m],p_RN_z [m],q_RN_w [],q_RN_x [],q_RN_y [],q_RN_z []
@@ -170,15 +173,6 @@ class RTABData:
         # 通过 ids 获取时间戳
         opt_t_us = [self.node_t_us[self.node_ids.index(idx)] for idx in self.opt_ids]
         self.opt_t_us = np.array(opt_t_us)
-
-        # 插值
-        # cs = pose_interpolate(
-        #     cs=self.get_time_pose_series(using_opt=True),
-        #     t_new_us=self.node_t_us,
-        # )
-        # self.opt_t_us = cs.t_us
-        # self.opt_qs = cs.qs
-        # self.opt_ps = cs.ps
 
     def load_node_data(self):
         results = self.cursor.execute("""

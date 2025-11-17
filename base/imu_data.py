@@ -35,10 +35,10 @@ class IMUData:
         # timestamp [us],w_RS_S_x [rad s^-1],w_RS_S_y [rad s^-1],w_RS_S_z [rad s^-1],
         # a_RS_S_x [m s^-2],a_RS_S_y [m s^-2],a_RS_S_z [m s^-2],
         # q_RS_w [],q_RS_x [],q_RS_y [],q_RS_z []
-        df: pd.DataFrame = pd.read_csv(self.file_path)
+        df: pd.DataFrame = pd.read_csv(self.file_path).dropna()
         self.raw_data = df.to_numpy()
 
-        self.t_us = self.raw_data[:, 0].astype(np.int64)
+        self.t_us = self.raw_data[:, 0]
         self.gyro = self.raw_data[:, 1:4]  # angular velocity
         self.acce = self.raw_data[:, 4:7]  # linear acceleration
         self.raw_ahrs = self.raw_data[:, 7:11]  # orientation
@@ -51,7 +51,7 @@ class IMUData:
 
         self.extend = bool(self.raw_data.shape[1] > 11)
         if self.extend:
-            self.t_sys_us = self.raw_data[:, 11].astype(np.int64)  # 1970 us
+            self.t_sys_us = self.raw_data[:, 11]  # 1970 us
             self.t_sys_us = self.t_sys_us[0] + self.t_us_f0
 
         # Calculate IMU frequency

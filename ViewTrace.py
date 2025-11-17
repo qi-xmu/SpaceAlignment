@@ -1,17 +1,16 @@
 from pathlib import Path
 
 from base import ARCoreData, IMUData, RTABData, UnitData
-from base.datatype import CalibrationData
-from hand_eye import calibrate_b1_b2
+from hand_eye import calibrate_b1_b2, load_calibration_data
 from rerun_ext import rerun_calibration as rrec
 
 
 def view_only(path: Path | str):
     path = Path(path)
-    fp = UnitData(path)
-    gt_data = RTABData(fp.gt_path)
-    imu_data = IMUData(fp.imu_path)
-    cd = CalibrationData.from_json(fp.calibr_file)
+    unit = UnitData(path)
+    gt_data = RTABData(unit.gt_path)
+    imu_data = IMUData(unit.imu_path)
+    cd = load_calibration_data(unit=unit)
     rrec.rerun_init("View IMU Data")
     rrec.send_imu_cam_data(imu_data)
     rrec.send_gt_data(gt_data, cd)

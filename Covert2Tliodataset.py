@@ -11,16 +11,15 @@ import pandas as pd
 from pyquaternion import Quaternion
 
 from base import (
-    CalibrationData,
     FilePath,
     FlattenUnitData,
     IMUData,
     RTABData,
+    TimePoseSeries,
 )
-from base.datatype import TimePoseSeries
 from base.interpolate import get_time_series, pose_interpolate
 from base.space import transform_local
-from Check import arg_parser
+from hand_eye import load_calibration_data
 
 
 class TLIO:
@@ -87,7 +86,7 @@ def UnitCovert(
     target_path = TargetPaths(target_root)
     imu_data = IMUData(unit.imu_path)
     gt_data = GroundtruthData(unit.gt_path)
-    cd = CalibrationData.from_json(unit.calibr_file)
+    cd = load_calibration_data(unit=unit)
 
     # 使用csv存储原始数据
     imu_samples = pd.DataFrame()
@@ -144,15 +143,19 @@ def UnitCovert(
 
 if __name__ == "__main__":
     arg_parser = argparse.ArgumentParser()
-    arg_parser.add_argument("--dataset", type=str)
-    arg_parser.add_argument("--target", type=str)
+    arg_parser.add_argument("-d", "--dataset", type=str)
+    arg_parser.add_argument("-t", "--target", type=str)
 
     args = arg_parser.parse_args()
     dataset_path = Path(args.dataset)
     target_path = Path(args.target)
 
+    if not target_path.exists():
+        target_path.mkdir(parents=True)
+
     fp = FilePath(dataset_path)
     flatten_data = fp.flatten()
-    for flatten0 in flatten_data:
+    for i, flatten0 in enumerate(flatten_data):
+        print(i, "...")
         UnitCovert(flatten0, target_root=target_path.joinpath(flatten0.data_id))
     print("Done")

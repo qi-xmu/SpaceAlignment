@@ -4,7 +4,7 @@ import rerun.blueprint as rrb
 
 from base import ARCoreData, CalibrationData, IMUData, RTABData
 from base.interpolate import get_time_series, pose_interpolate
-from base.space import transform_local, transform_world
+from base.space import transform_world
 
 from . import log_coordinate, send_columns_path
 

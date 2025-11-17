@@ -7,6 +7,7 @@ import rerun as rr
 import rerun_ext.rerun_calibration as rrec
 import time_matching
 from base import (
+    NO_CAM_DEVICES,
     ARCoreData,
     CalibrationData,
     GroupData,
@@ -208,15 +209,15 @@ def calibrate_unit(
 ):
     print(f"Calibrating {path}")
     path = Path(path)
-    fp = UnitData(path)
-    imu_data = IMUData(fp.imu_path)
-    gt_data = RTABData(fp.gt_path)
+    unit = UnitData(path)
+    imu_data = IMUData(unit.imu_path)
+    gt_data = RTABData(unit.gt_path)
 
     cs_i = imu_data.get_time_pose_series()
     cs_g = gt_data.get_time_pose_series()
 
     if using_cam:
-        cam_data = ARCoreData(fp.cam_path, z_up=False)
+        cam_data = ARCoreData(unit.cam_path, z_up=False)
         calibrate_sensor_camera(cam_data)
 
         cs_c = cam_data.get_time_pose_series()
@@ -264,8 +265,8 @@ def calibrate_unit(
             rrec.send_imu_cam_data(imu_data)
             rrec.send_gt_data(gt_data, calibr_data)
 
-    calibr_data.to_json(fp.calibr_file, notes)
-    rr.save(fp.target("data.rrd"))
+    calibr_data.to_json(unit.calibr_file, notes)
+    rr.save(unit.target("data.rrd"))
     return calibr_data
 
 
@@ -274,3 +275,19 @@ def calibrate_group(path):
     for unit in gp.raw_calibr_path.iterdir():
         if unit.is_dir():
             calibrate_unit(unit)
+
+
+def load_calibration_data(
+    *,
+    unit: UnitData,
+    using_rerun: bool = False,
+):
+    # 加载 校准数据
+    try:
+        cd = CalibrationData.from_json(unit.calibr_file)
+    except Exception as _:
+        print("-" * 20, f"标定 {unit.device_name}")
+        using_cam = unit.device_name not in NO_CAM_DEVICES
+        cd = calibrate_unit(unit.base_dir, using_cam=using_cam, using_rerun=using_rerun)
+        cd.to_json(unit.calibr_file)
+    return cd

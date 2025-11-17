@@ -135,9 +135,8 @@ class FlattenUnitData(UnitData):
         self.group_id = group.group_id
         self.scene_type = group.scene_type
         self.calibr_file = group.calibr_files[unit.device_name]
-        self.calibr_data = CalibrationData.from_json(self.calibr_file)
 
-        super().__init__(unit.cam_path.parent)
+        super().__init__(unit.base_dir)
 
     def parse_calibr_file(self):
         with open(self.calibr_file, "r") as f:
@@ -267,24 +266,20 @@ class CalibrationData:
         return (self.rot_ref_gt_sensor, self.tr_ref_gt_sensor)
 
     @staticmethod
-    def from_json(json_path: Path | None) -> "CalibrationData":
-        if json_path is None:
+    def from_json(json_path: Path) -> "CalibrationData":
+        with open(json_path, "r") as f:
+            data = json.load(f)
+            if not isinstance(data, list) or len(data) != 1:
+                raise ValueError("Invalid JSON format")
+            data = data[0]
+
             return CalibrationData(
-                rot_sensor_gt=np.eye(3),
-                tr_sensor_gt=np.zeros(3),
-                rot_ref_sensor_gt=np.eye(3),
-                tr_ref_sensor_gt=np.zeros(3),
+                rot_sensor_gt=np.array(data["rot_sensor_gt"]),
+                tr_sensor_gt=np.array(data["trans_sensor_gt"]).flatten(),
+                rot_ref_sensor_gt=np.array(data["rot_ref_sensor_gt"]),
+                tr_ref_sensor_gt=np.array(data["trans_ref_sensor_gt"]).flatten(),
+                file_path=json_path,
             )
-        else:
-            with open(json_path, "r") as f:
-                data = json.load(f)[0]
-                return CalibrationData(
-                    rot_sensor_gt=np.array(data["rot_sensor_gt"]),
-                    tr_sensor_gt=np.array(data["trans_sensor_gt"]).flatten(),
-                    rot_ref_sensor_gt=np.array(data["rot_ref_sensor_gt"]),
-                    tr_ref_sensor_gt=np.array(data["trans_ref_sensor_gt"]).flatten(),
-                    file_path=json_path,
-                )
 
     def to_json(self, json_path: Path | str, notes_ext: str = "") -> None:
         rot_sensor_gt = (

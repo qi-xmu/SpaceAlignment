@@ -15,6 +15,8 @@ from .datatype import (  # noqa
 from .imu_data import IMUData  # noqa
 from .rtab_data import RTABData  # noqa
 
+NO_CAM_DEVICES = ["ABR-AL60"]
+
 
 class FilePath:
     root_dir: Path

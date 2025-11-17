@@ -2,8 +2,7 @@ import argparse
 
 import numpy as np
 
-from base import IMUData, RTABData, UnitData
-from base.datatype import GroupData
+from base import GroupData, IMUData, RTABData, UnitData
 from time_diff import match_correlation
 
 
@@ -53,10 +52,10 @@ if __name__ == "__main__":
 
     # 解析命令行参数，获取数据集路径
     arg_parser = argparse.ArgumentParser(description="Ground Truth Analysis")
-    arg_parser.add_argument("-d", "--dataset", help="Path to the dataset")
+    arg_parser.add_argument("-u", "--unit", help="Path to the dataset unit")
     arg_parser.add_argument("-g", "--group", help="Group name")
     args = arg_parser.parse_args()
-    dataset: str = args.dataset
+    dataset: str = args.unit
     group = args.group if args.group else "dataset/001/20251031_01_in"
 
     if group:

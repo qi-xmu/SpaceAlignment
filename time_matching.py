@@ -5,7 +5,7 @@ import numpy as np
 
 from base import ARCoreData, RTABData, UnitData
 from base.datatype import TimePoseSeries
-from time_diff import match_correlation, match_correlation_draw
+from time_diff import match_correlation
 
 
 # 计算ARCore的时间间隔
@@ -87,10 +87,9 @@ def nearest_match(
     t21_us = 0
 
     if is_t_diff:
-        t21_us, ts, seq1, seq2 = match_correlation(cs1, cs2)
+        t21_us = match_correlation(cs1, cs2)
         ts2 = ts2 + t21_us
         print(f"匹配时间差: {t21_us * 1e-6:.6f} s")
-        match_correlation_draw(t21_us, ts, seq1, seq2, show=show_t_diff)
 
     matches, _, _ = find_closest_matches_with_threshold(ts1, ts2)
 

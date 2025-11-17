@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 # from pprint import pprint
+import argparse
 import json
 from pathlib import Path
 from typing import Literal
@@ -19,6 +20,7 @@ from base import (
 from base.datatype import TimePoseSeries
 from base.interpolate import get_time_series, pose_interpolate
 from base.space import transform_local
+from Check import arg_parser
 
 
 class TLIO:
@@ -141,13 +143,16 @@ def UnitCovert(
 
 
 if __name__ == "__main__":
-    base_dir = Path("./dataset")
-    fp = FilePath(base_dir, ["001"])
-    flatten_data = fp.flatten()
+    arg_parser = argparse.ArgumentParser()
+    arg_parser.add_argument("--dataset", type=str)
+    arg_parser.add_argument("--target", type=str)
 
+    args = arg_parser.parse_args()
+    dataset_path = Path(args.dataset)
+    target_path = Path(args.target)
+
+    fp = FilePath(dataset_path)
+    flatten_data = fp.flatten()
     for flatten0 in flatten_data:
-        UnitCovert(
-            flatten0,
-            target_root=base_dir.joinpath("tlio").joinpath(flatten0.data_id),
-        )
+        UnitCovert(flatten0, target_root=target_path.joinpath(flatten0.data_id))
     print("Done")

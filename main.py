@@ -1,9 +1,11 @@
-from base import PERSON_LIST, FilePath, IMUData, RTABData
+from base import FilePath, IMUData, RTABData
 from base.arcore_data import ARCoreData
 from base.interpolate import get_time_series, interpolate_vector3d, pose_interpolate
 
 if __name__ == "__main__":
-    fp = FilePath("./dataset", PERSON_LIST)
+    # fp = FilePath("/Users/qi/Resources/Dataset001")
+
+    exit()
     flatten = fp.flatten()
     flatten0 = flatten[0]
 

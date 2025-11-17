@@ -45,19 +45,19 @@ class ARCoreData:
         if self.extend:
             self.raw_cam_ps = self.raw_data[:, 8:11]
             self.raw_cam_qs = self.raw_data[:, 11:15]
-            self.system_t_us = self.raw_data[:, 15]
+            self.t_sys_us = self.raw_data[:, 15].astype(np.int64)
 
             self.cam_ps = self._transform_world(self.raw_cam_ps)
             self.cam_qs = self._to_q_obj(self.raw_cam_qs)
             # 根据 self.t_us 的时间间隔更新 self.t_sys_us，使其与 self.t_us 保持一致
             # 使用 t_us 的时间基准，但保持 t_sys_us 的起始时间
-            self.system_t_us = self.system_t_us[0] + self.t_us_f0
+            self.t_sys_us = self.t_sys_us[0] + self.t_us_f0
 
     def get_time_pose_series(
         self, max_idx: int | None = None, *, using_cam: bool = False
     ) -> TimePoseSeries:
         return TimePoseSeries(
-            ts=self.system_t_us[:max_idx],
+            ts=self.t_sys_us[:max_idx],
             qs=self.sensor_qs[:max_idx] if not using_cam else self.cam_qs[:max_idx],
             ps=self.sensor_ps[:max_idx] if not using_cam else self.cam_ps[:max_idx],
         )

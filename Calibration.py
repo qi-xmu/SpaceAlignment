@@ -7,7 +7,15 @@
 
 import argparse
 
+from base import Dataset
 from hand_eye import calibrate_group, calibrate_unit
+
+
+def calibrate_dataset(path: str):
+    dataset = Dataset(path)
+    for person in dataset.persons:
+        for group in person.groups:
+            calibrate_group(group)
 
 
 def main():
@@ -16,13 +24,21 @@ def main():
     parser = argparse.ArgumentParser(description="Calibration")
     parser.add_argument("-u", "--unit", help="Dataset unit path", required=False)
     parser.add_argument("-g", "--group", help="Group path", required=False)
+    parser.add_argument("-d", "--dataset", help="Dataset path", required=False)
     args = parser.parse_args()
+    unit = args.unit
+    group = args.group
+    dataset = args.dataset
 
-    if args.unit is None:
-        args.unit = default_path
-        calibrate_unit(args.unit)
-    elif args.group is not None:
-        calibrate_group(args.group)
+    if unit is None:
+        unit = default_path
+        calibrate_unit(unit)
+    elif group is not None:
+        calibrate_group(group)
+    elif dataset is not None:
+        calibrate_dataset(dataset)
+    else:
+        print("No calibration target specified.")
 
 
 if __name__ == "__main__":

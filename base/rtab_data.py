@@ -5,6 +5,7 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+from numpy.typing import NDArray
 from pyquaternion import Quaternion
 
 from .datatype import CalibrationData, TimePoseSeries
@@ -89,10 +90,10 @@ class RTABData:
         self.opt_ids: list[int] = []
         self.opt_qs: list[Quaternion] = []
         self.opt_ps: np.ndarray
-        self.opt_t_us: np.ndarray
+        self.opt_t_us: NDArray[np.int64]
 
-        self.node_t_us: np.ndarray
-        self.t_us_f0: np.ndarray
+        self.node_t_us: NDArray[np.int64]
+        self.t_us_f0: NDArray[np.int64]
         self.node_ids: list[int] = []
         self.node_qs: list[Quaternion] = []
         self.node_ps: np.ndarray

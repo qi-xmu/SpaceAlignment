@@ -4,12 +4,14 @@ from pathlib import Path
 from typing import Literal
 
 import numpy as np
+from numpy.typing import NDArray
 from pyquaternion import Quaternion
 
 Pose = tuple[np.ndarray | None, np.ndarray | None]
 Poses = tuple[list[np.ndarray], list[np.ndarray]]
-Time = np.ndarray
+Time = NDArray[np.int64]
 
+NO_CAM_DEVICES = ["ABR-AL60"]
 SceneType = Literal["in", "out"]  # 场景类型，in 表示室内场景，out 表示室外场景
 DeviceType = Literal[
     "SM-G9900",  # 三星 FE 21 5G
@@ -49,6 +51,11 @@ class UnitData:
         if not calir_file.exists():
             calir_file = self.base_dir.joinpath("Calibration.json")
         self.calibr_file = calir_file
+        self.z_up = False
+
+    @property
+    def using_cam(self):
+        return self.device_name not in NO_CAM_DEVICES
 
     def _load_gt_path(self):
         # 优先使用 rtab.csv 文件
@@ -114,9 +121,8 @@ class PersonData:
     person_id: str
     groups: list[GroupData]
 
-    def __init__(self, base_dir: Path, person_id: str) -> None:
-        self.person_id = person_id
-        base_dir = base_dir.joinpath(person_id)
+    def __init__(self, base_dir: Path) -> None:
+        self.person_id = base_dir.name
         self.groups = []
         for item in base_dir.iterdir():
             if item.is_dir():
@@ -176,6 +182,19 @@ class TimePoseSeries:
         for match in matches:
             rot = self.qs[match[index]].rotation_matrix
             tr = self.ps[match[index]]
+            if inverse:
+                rot = rot.T
+                tr = -rot @ tr
+            Rs.append(rot)
+            ts.append(tr)
+        return Rs, ts
+
+    def get_all(self, *, inverse=False) -> Poses:
+        Rs = []
+        ts = []
+        for i in range(len(self)):
+            rot = self.qs[i].rotation_matrix
+            tr = self.ps[i]
             if inverse:
                 rot = rot.T
                 tr = -rot @ tr

@@ -11,7 +11,7 @@ import pandas as pd
 from pyquaternion import Quaternion
 
 from base import (
-    FilePath,
+    Dataset,
     FlattenUnitData,
     IMUData,
     RTABData,
@@ -153,7 +153,7 @@ if __name__ == "__main__":
     if not target_path.exists():
         target_path.mkdir(parents=True)
 
-    fp = FilePath(dataset_path)
+    fp = Dataset(dataset_path, ["001"])
     flatten_data = fp.flatten()
     for i, flatten0 in enumerate(flatten_data):
         print(i, "...")

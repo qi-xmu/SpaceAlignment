@@ -89,7 +89,7 @@ def send_imu_cam_data(
     )
 
     if cam_data:
-        ts_cam = rr.TimeColumn("timestamp", timestamp=cam_data.system_t_us * 1e-6)
+        ts_cam = rr.TimeColumn("timestamp", timestamp=cam_data.t_sys_us * 1e-6)
         log_coordinate(
             "/world/W_TO_CAM/sensor", length=0.1, labels=["Sensor"], show_labels=True
         )

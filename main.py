@@ -1,4 +1,4 @@
-from base import FilePath, IMUData, RTABData
+from base import Dataset, IMUData, RTABData
 from base.arcore_data import ARCoreData
 from base.interpolate import get_time_series, interpolate_vector3d, pose_interpolate
 

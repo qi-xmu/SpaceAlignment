@@ -36,7 +36,7 @@ def match_correlation(
     time_range=(1, 20),
     resolution=100,
     show=False,
-) -> int:
+):
     """使用互相关法匹配Rs1和Rs2"""
     # 分辨率不能大于时间序列的采样率，否则没有插值的意义
     resolution = min(resolution, cs1.rate, cs2.rate)
@@ -74,7 +74,7 @@ def match_correlation(
         ax.grid()
         plt.show()
 
-    return t21_us
+    return int(t21_us)
 
 
 def main():

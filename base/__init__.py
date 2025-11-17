@@ -15,23 +15,15 @@ from .datatype import (  # noqa
 from .imu_data import IMUData  # noqa
 from .rtab_data import RTABData  # noqa
 
-NO_CAM_DEVICES = ["ABR-AL60"]
 
-
-class FilePath:
+class Dataset:
     root_dir: Path
     persons: list[PersonData]
 
-    def __init__(
-        self,
-        root_dir: str | Path,
-    ):
+    def __init__(self, root_dir: str | Path, person_ids: list[str] | None = None):
         self.root_dir = Path(root_dir)
-        self.person_ids = self._load_dir_list()
-
-        self.persons = list(
-            map(lambda person_id: PersonData(self.root_dir, person_id), self.person_ids)
-        )
+        person_ids = person_ids if person_ids else self._load_dir_list()
+        self.persons = [PersonData(self.root_dir.joinpath(pid)) for pid in person_ids]
 
     def _load_dir_list(self) -> list[str]:
         return [it.name for it in self.root_dir.iterdir() if it.is_dir()]

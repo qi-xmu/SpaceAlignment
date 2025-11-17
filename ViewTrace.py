@@ -28,13 +28,13 @@ def view_calibration(path: Path | str):
     cs3 = cam_data.get_time_pose_series()
 
     # 标定结果，保存到文件
-    cd32, _ = calibrate_b1_b2(
+    cd32 = calibrate_b1_b2(
         cs_ref1_body1=cs3,
         cs_ref2_body2=cs2,
         rot_only=False,
     )
 
-    cd13, _ = calibrate_b1_b2(
+    cd13 = calibrate_b1_b2(
         cs_ref1_body1=cs1,
         cs_ref2_body2=cs3,
         rot_only=True,

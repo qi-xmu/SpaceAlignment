@@ -5,23 +5,24 @@ import numpy as np
 import pandas as pd
 from pyquaternion import Quaternion
 
-from .datatype import TimePoseSeries
+from .datatype import Time, TimePoseSeries
 from .interpolate import interpolate_vector3d, slerp_quaternion
 
 
 @final
 class IMUData:
+    t_us: Time
+    t_us_f0: Time
+    t_sys_us: Time
+
     def __init__(self, file_path: str | Path, target_freq: int = 200) -> None:
         self.file_path = str(file_path)
         self.target_freq = target_freq
         self.raw_data = np.array([])
-        self.t_us = np.array([])
         self.gyro = np.array([])
         self.acce = np.array([])
         self.raw_ahrs = np.array([])
         self.ahrs_qs: list[Quaternion] = []
-        self.t_us_f0 = np.array([])
-        self.t_sys_us = np.array([])
         self.imu_freq: float = 0.0
         self.load_data()
 
@@ -37,7 +38,7 @@ class IMUData:
         df: pd.DataFrame = pd.read_csv(self.file_path)
         self.raw_data = df.to_numpy()
 
-        self.t_us = self.raw_data[:, 0]
+        self.t_us = self.raw_data[:, 0].astype(np.int64)
         self.gyro = self.raw_data[:, 1:4]  # angular velocity
         self.acce = self.raw_data[:, 4:7]  # linear acceleration
         self.raw_ahrs = self.raw_data[:, 7:11]  # orientation
@@ -50,7 +51,7 @@ class IMUData:
 
         self.extend = bool(self.raw_data.shape[1] > 11)
         if self.extend:
-            self.t_sys_us = self.raw_data[:, 11]  # 1970 us
+            self.t_sys_us = self.raw_data[:, 11].astype(np.int64)  # 1970 us
             self.t_sys_us = self.t_sys_us[0] + self.t_us_f0
 
         # Calculate IMU frequency

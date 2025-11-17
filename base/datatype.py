@@ -1,5 +1,4 @@
 import json
-import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
@@ -19,29 +18,64 @@ DeviceType = Literal[
 ]
 
 
-@dataclass
 class UnitData:
+    _CALIBR_FILE = "Calibration_{}.json"
+
     data_id: str
-    device_type: DeviceType
-    gt_path: Path
     imu_path: Path
-    cam_path: Path
+    cam_path: Path  # ARCore
+    gt_path: Path
+    calibr_file: Path
 
-    def __init__(self, base_dir: Path) -> None:
-        ymd, hms, device_type = base_dir.name.split("_")
-        self.data_id = f"{ymd}_{hms}"
-        self.device_type = device_type  # type: ignore
+    def __init__(self, base_dir: Path | str):
+        self.base_dir = Path(base_dir)
+        self.data_id = self.base_dir.name
+        _, _, device_name = self.data_id.split("_")
 
-        self.imu_path = base_dir.joinpath("imu.csv")
-        self.cam_path = base_dir.joinpath("cam.csv")
+        self.cam_path = self.base_dir.joinpath("cam.csv")
+        self.imu_path = self.base_dir.joinpath("imu.csv")
+        self._load_gt_path()
+
+        self.dataset_id = self.base_dir.parent
+        self.device_name = device_name
+        self.calibr_name = self._CALIBR_FILE.format(device_name)
+
+        if "/Calibration" in str(self.base_dir):
+            self.group_path = self.base_dir.parent.parent
+        else:
+            self.group_path = self.base_dir.parent
+
+        calir_file = self.group_path.joinpath(self.calibr_name)
+        if not calir_file.exists():
+            calir_file = self.base_dir.joinpath("Calibration.json")
+        self.calibr_file = calir_file
+
+    def _load_gt_path(self):
+        # 优先使用 rtab.csv 文件
+        self.gt_path = self.base_dir.joinpath("rtab.csv")
+        if self.gt_path.exists():
+            return
 
         # 检查此文件夹下文件，选中第一个后缀为 db 的文件
-        for file in os.listdir(base_dir):
-            if file.endswith(".db"):
-                self.gt_path = base_dir.joinpath(file)
+        for file in self.base_dir.iterdir():
+            if file.suffix == ".db":
+                self.gt_path = file
                 break
         else:
-            raise FileNotFoundError(f"No .db file found in {base_dir}")
+            raise FileNotFoundError(f"No .db file found in {self.base_dir}")
+
+    def target(self, target_name) -> Path:
+        return self.base_dir.joinpath(target_name)
+
+    def __str__(self) -> str:
+        return str(
+            {
+                "imu_path": self.imu_path,
+                "cam_path": self.cam_path,
+                "gt_path": self.gt_path,
+                "calir_file": self.calibr_file,
+            }
+        )
 
 
 @dataclass
@@ -100,7 +134,7 @@ class FlattenUnitData(UnitData):
         self.person_id = person.person_id if person is not None else None
         self.group_id = group.group_id
         self.scene_type = group.scene_type
-        self.calibr_file = group.calibr_files[unit.device_type]
+        self.calibr_file = group.calibr_files[unit.device_name]
         self.calibr_data = CalibrationData.from_json(self.calibr_file)
 
         super().__init__(unit.cam_path.parent)
@@ -121,17 +155,21 @@ class TimePoseSeries:
     """
 
     # timestampe in us
-    ts_us: Time
+    t_us: Time
     qs: list[Quaternion]
     ps: np.ndarray
 
     def __init__(self, ts: Time, qs: list[Quaternion], ps: np.ndarray):
-        self.ts_us = ts
+        self.t_us = ts
         self.qs = qs
         self.ps = ps
 
     def __len__(self) -> int:
-        return len(self.ts_us)
+        return len(self.t_us)
+
+    @property
+    def rate(self) -> float:
+        return len(self) / (self.t_us[-1] - self.t_us[0]) * 1e6
 
     def get_match(self, matches, *, index=0, inverse=False) -> Poses:
         Rs = []
@@ -151,12 +189,19 @@ class TimePoseSeries:
         qs = []
         ps = []
         for match in matches:
-            ts.append(self.ts_us[match[index]])
+            ts.append(self.t_us[match[index]])
             qs.append(self.qs[match[index]])
             ps.append(self.ps[match[index]])
         ts = np.array(ts)
         ps = np.array(ps)
         return TimePoseSeries(ts, qs, ps)
+
+    def get_range(self, start: int | None = None, end: int | None = None):
+        return TimePoseSeries(
+            self.t_us[start:end],
+            self.qs[start:end],
+            self.ps[start:end],
+        )
 
 
 @dataclass
@@ -212,6 +257,14 @@ class CalibrationData:
         if self.tr_ref_sensor_gt is None or self.rot_ref_sensor_gt is None:
             return None
         return -self.rot_ref_sensor_gt.T @ self.tr_ref_sensor_gt
+
+    @property
+    def tf_local(self):
+        return (self.rot_sensor_gt, self.tr_sensor_gt)
+
+    @property
+    def tf_world(self):
+        return (self.rot_ref_gt_sensor, self.tr_ref_gt_sensor)
 
     @staticmethod
     def from_json(json_path: Path | None) -> "CalibrationData":

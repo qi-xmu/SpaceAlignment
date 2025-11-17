@@ -15,5 +15,5 @@ wheels/
 .DS_Store
 /CalibrationResults
 
-*.csv
-*.png
+/*.csv
+/*.png

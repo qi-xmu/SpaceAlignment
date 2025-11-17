@@ -1,10 +1,6 @@
-import numpy as np
-from pyquaternion import Quaternion
-
-from base import PERSON_LIST, FilePath, IMUData, RTABData, UnitPath
+from base import PERSON_LIST, FilePath, IMUData, RTABData
 from base.arcore_data import ARCoreData
-from base.interpolate import get_time_series, pose_interpolate
-from base.space import transform_local, transform_world
+from base.interpolate import get_time_series, interpolate_vector3d, pose_interpolate
 
 if __name__ == "__main__":
     fp = FilePath("./dataset", PERSON_LIST)
@@ -15,13 +11,29 @@ if __name__ == "__main__":
     cam_data = ARCoreData(flatten0.cam_path)
     gt_data = RTABData(flatten0.gt_path)
 
-    t_new_us = get_time_series([imu_data.t_sys_us, gt_data.node_t_us])
+    t_new_us = get_time_series([imu_data.t_sys_us, gt_data.t_sys_us])
 
-    pose_interpolate(
+    cs_gt = pose_interpolate(
         cs=gt_data.get_time_pose_series(),
         t_new_us=t_new_us,
     )
-    exit()
+    imu_data.acce = interpolate_vector3d(
+        vec3d=imu_data.acce,
+        t_old_us=imu_data.t_sys_us,
+        t_new_us=t_new_us,
+    )
+    imu_data.gyro = interpolate_vector3d(
+        vec3d=imu_data.gyro,
+        t_old_us=imu_data.t_sys_us,
+        t_new_us=t_new_us,
+    )
+    imu_data.t_sys_us = t_new_us
+    imu_data.transform_to_world(qs=cs_gt.qs)
+
+    assert len(t_new_us) == len(imu_data) == len(cs_gt), (
+        f"Length mismatch, {len(t_new_us)} != {len(cs_gt)} != {len(imu_data)}"
+    )
+    print(f"Data loaded successfully, {len(cs_gt)}")
 
 
 # points = [1, 2, 3, 4]

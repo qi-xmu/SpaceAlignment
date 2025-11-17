@@ -97,15 +97,34 @@ class RTABData:
         self.node_qs: list[Quaternion] = []
         self.node_ps: np.ndarray
 
-        assert self.file_path.endswith(".db"), "RTAB-Map data file must be a .db file"
+        if self.file_path.endswith(".csv"):
+            print("Loading from CSV data...")
+            self.load_csv_data()
+        elif self.file_path.endswith(".db"):
+            print("Loading from DB data...")
+            # 从数据库中加载
+            self.conn = sqlite3.connect(self.file_path)
+            self.cursor = self.conn.cursor()
+            self.load_node_data()
+            self.load_opt_data()
+        else:
+            raise ValueError("RTAB-Map data file must be a .csv or .db file")
 
-        # 从数据库中加载
-        self.conn = sqlite3.connect(self.file_path)
-        self.cursor = self.conn.cursor()
-        self.load_node_data()
-        self.load_opt_data()
-
+        self.t_us_f0 = self.node_t_us - self.node_t_us[0]
+        self.t_sys_us = self.node_t_us
         self.node_freq = 1e6 / np.mean(np.diff(self.node_t_us))
+        print(
+            f"Loaded {len(self.node_ids)} nodes, {len(self.opt_ids)} optimized witch Freq: {self.node_freq} from the database. "
+        )
+
+    def load_csv_data(self):
+        # #timestamp [us],p_RN_x [m],p_RN_y [m],p_RN_z [m],q_RN_w [],q_RN_x [],q_RN_y [],q_RN_z []
+        data = pd.read_csv(self.file_path).to_numpy()
+        self.node_t_us = data[:, 0]
+        self.node_ps = data[:, 1:4]
+        self.node_qs = [Quaternion(*q).unit for q in data[:, 4:]]
+        self.opt_qs = self.node_qs
+        self.opt_ps = self.node_ps
 
     def load_opt_data(self):
         # 查询Admin表中的opt_poses数据
@@ -148,13 +167,17 @@ class RTABData:
         ), "Mismatch in lengths of opt_ids, ps, and unit_qs"
 
         # 通过 ids 获取时间戳
-        opt_t_us = []
-        for opt_id in self.opt_ids:
-            t = self.node_t_us[self.node_ids.index(opt_id)]
-            opt_t_us.append(t)
-
+        opt_t_us = [self.node_t_us[self.node_ids.index(idx)] for idx in self.opt_ids]
         self.opt_t_us = np.array(opt_t_us)
-        # print(f"Loaded {len(self.opt_ids)} optimized poses from the database.")
+
+        # 插值
+        # cs = pose_interpolate(
+        #     cs=self.get_time_pose_series(using_opt=True),
+        #     t_new_us=self.node_t_us,
+        # )
+        # self.opt_t_us = cs.t_us
+        # self.opt_qs = cs.qs
+        # self.opt_ps = cs.ps
 
     def load_node_data(self):
         results = self.cursor.execute("""
@@ -181,17 +204,15 @@ class RTABData:
 
         self.node_t_us = np.array(node_t_us)
         self.node_ps = np.array(node_ps)
-        self.t_us_f0 = self.node_t_us - self.node_t_us[0]
-        self.node_freq = 1e6 / np.mean(np.diff(self.node_t_us))
-        # print(
-        #     f"Loaded {len(self.node_ids)} nodes witch Freq: {self.node_freq} from the database."
-        # )
 
-    def get_time_pose_series(self, max_idx: int | None = None) -> TimePoseSeries:
+    def get_time_pose_series(
+        self, max_idx: int | None = None, *, using_opt: bool = False
+    ) -> TimePoseSeries:
         return TimePoseSeries(
-            ts=self.node_t_us[:max_idx],
-            qs=self.node_qs[:max_idx],
-            ps=self.node_ps[:max_idx],
+            # self.node_t_us  == self.t_sys_us
+            ts=self.node_t_us[:max_idx] if not using_opt else self.opt_t_us[:max_idx],
+            qs=self.node_qs[:max_idx] if not using_opt else self.opt_qs[:max_idx],
+            ps=self.node_ps[:max_idx] if not using_opt else self.opt_ps[:max_idx],
         )
 
     def fix_time(self, t_21_us: int):
@@ -200,10 +221,13 @@ class RTABData:
         self.t_us_f0 += t_21_us
         self.opt_t_us += t_21_us
 
-    def save_data(self, name, data):
-        pass
-
-    def draw(self, show=True, save_path=None):
+    def draw(
+        self,
+        *,
+        mark_idxs: tuple[list[int], list | None] = ([], None),
+        show=True,
+        save_path=None,
+    ):
         try:
             import matplotlib.pyplot as plt
 
@@ -227,6 +251,21 @@ class RTABData:
                 alpha=0.5,
             )
 
+            # 绘制标记点
+            if mark_idxs:
+                mark_note = (
+                    [str(it) for it in mark_idxs[1]]
+                    if mark_idxs[1] is not None
+                    else ["" for _ in range(len(mark_idxs[0]))]
+                )
+                mark_ps = node_ps[mark_idxs[0]]
+                assert len(mark_ps) == len(mark_note), (
+                    f"mark_idxs and mark_note must have the same length, but got {len(mark_idxs)} and {len(mark_note)}"
+                )
+                for i in range(len(mark_ps)):
+                    ax.plot(mark_ps[i, 0], mark_ps[i, 1], "o", color="y")
+                    ax.text(mark_ps[i, 0], mark_ps[i, 1], mark_note[i], color="y")
+
             ax.set_xlabel("X (m)")
             ax.set_ylabel("Y (m)")
             ax.set_title(f"{self.file_path} Trajectory")
@@ -243,20 +282,38 @@ class RTABData:
             print("matplotlib is required for drawing the trajectory.")
 
     def save_csv(self, path: str | Path):
+        # assert len(self.node_t_us) == len(self.opt_t_us), (
+        #     f"Length mismatch: {len(self.node_t_us)} != {len(self.opt_t_us)}"
+        # )
         # #timestamp [us],p_RS_R_x [m],p_RS_R_y [m],p_RS_R_z [m],q_RS_w [],q_RS_x [],q_RS_y [],q_RS_z [],
         header = [
             "#timestamp [us]",
-            "p_RS_R_x [m]",
-            "p_RS_R_y [m]",
-            "p_RS_R_z [m]",
-            "q_RS_w []",
-            "q_RS_x []",
-            "q_RS_y []",
-            "q_RS_z []",
+            "p_RN_x [m]",
+            "p_RN_y [m]",
+            "p_RN_z [m]",
+            "q_RN_w []",
+            "q_RN_x []",
+            "q_RN_y []",
+            "q_RN_z []",
+            # "p_RO_x [m]",
+            # "p_RO_y [m]",
+            # "p_RO_z [m]",
+            # "q_RO_w []",
+            # "q_RO_x []",
+            # "q_RO_y []",
+            # "q_RO_z []",
         ]
-        qs = np.array([q.elements for q in self.node_qs])
 
-        data = np.concatenate([self.t_us_f0.reshape(-1, 1), self.node_ps, qs], axis=1)
+        data = np.concatenate(
+            [
+                self.t_sys_us.reshape(-1, 1),
+                self.node_ps,
+                np.array([q.elements for q in self.node_qs]),
+                # self.opt_ps,
+                # np.array([q.elements for q in self.opt_qs])
+            ],
+            axis=1,
+        )
 
         pd.DataFrame(data, columns=header).to_csv(
             path, index=False, float_format="%.8f"

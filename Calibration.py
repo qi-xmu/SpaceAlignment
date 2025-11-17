@@ -11,9 +11,7 @@ from hand_eye import calibrate_group, calibrate_unit
 
 
 def main():
-    default_path = (
-        "dataset/20251031_095725_SM-G9900"  # "dataset/20251111_204152_SM-G9900"
-    )
+    default_path = "dataset/001/20251031_01_in/Calibration/20251031_095725_SM-G9900"  # "dataset/20251111_204152_SM-G9900"
     # 读取命令行
     parser = argparse.ArgumentParser(description="Calibration")
     parser.add_argument("-d", "--dataset", help="Dataset path", required=False)

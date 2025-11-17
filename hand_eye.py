@@ -15,7 +15,7 @@ from base import (
     Poses,
     RTABData,
     TimePoseSeries,
-    UnitPath,
+    UnitData,
 )
 
 
@@ -73,8 +73,6 @@ def calibrate_pose_gripper_camera(
         rvec = rvec / ang
     print("旋转向量: ", rvec.flatten(), ang * 180 / np.pi)
     print("位移: ", t_gc.flatten())
-    if rot_only:
-        return R_gc, None
     return R_gc, t_gc.flatten()
 
 
@@ -210,7 +208,7 @@ def calibrate_unit(
 ):
     print(f"Calibrating {path}")
     path = Path(path)
-    fp = UnitPath(path)
+    fp = UnitData(path)
     imu_data = IMUData(fp.imu_path)
     gt_data = RTABData(fp.gt_path)
 

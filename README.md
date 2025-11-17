@@ -1,62 +1,62 @@
 # 使用说明
 
-每一次支架发生变化后，需要重新标定。
+## 数据检查说明
 
-## 时间对齐算法
+数据检查功能用于验证数据集的质量和时间同步性，主要包括时间偏移量检测和Ground Truth数据间隔分析。
 
-使用 `TimeMatch.py` 对齐时间
+### 功能特性
 
-> 算法简介：匹配两个时间序列最近的时间点，阈值为高频率序列最大间隔的 1/2。
+1. **时间偏移量检测**：通过相关性匹配算法计算IMU数据和Ground Truth数据之间的最佳时间偏移量
+2. **Ground Truth间隔分析**：检查Ground Truth数据的时间间隔，识别异常大的时间间隔
+3. **可视化展示**：生成图表直观显示数据质量
 
-```python
-if __name__ == "__main__":
-    dataset_id = "20251020_173007"
-    params = FilePaths(dataset_id)
-    rtab_data = RTABData(params.rtab_db)
-    arcore_data = ARCoreData(params.arcore_csv)
+### 使用方法
 
-    # 获取时间轴数据
-    ts1 = arcore_data.t_sys_us
-    ts2 = rtab_data.node_t_us
-    matches = match(ts1, ts2, dataset_id)
-    match_draw(ts1, ts2, matches)
+#### 检查单个数据集
+
+```bash
+python Check.py -d dataset/001/20251031_01_in/20251031_101025_SM-G9900
 ```
 
-匹配完成之后，可以获得变量 `matches`，其中包含了匹配的结果，可以使用 `matches.draw()` 绘制匹配结果。
+#### 检查整个数据组
 
-## 空间对齐算法 Hand Eye Calibration
-
-使用 `Calibration.py` 标定匹配的 位姿对
-
-> 算法简介：使用 Hand-Eye 标定算法，求解 相机到 标定基座的 位姿。默认使用 Park 算法。具体算法说明：https://flowus.cn/qiml/share/55c35643-f1de-4592-a1ea-f8d0d227cedd?code=1ZSBNL
-
-```python
-# 根据 索引对，转换为匹配的姿态对 Rs ts,
-Rs_w1c, ts_w1c = arcore.matches_sensor_Rsts(matches, index=0)
-# 注意， ts2 需要 inverse，根据 eye-in-hand 标定公式
-Rs_nw2, ts_nw2 = rtab.matches_node_Rsts(matches, index=1, inverse=True)
-
-# 标定结果，保存到文件
-R_cn, t_cn = calibrate_Rgc(Rs_w1c, ts_w1c, Rs_nw2, ts_nw2)
-evaluate_save(dataset_id, R_cn, t_cn, Rs_w1c, ts_w1c, Rs_nw2, ts_nw2)
+```bash
+python Check.py -g dataset/001/20251031_01_in
 ```
 
-标定时注意序列的先后顺序。假设先 A 后 B，则求解结果为 R_AB, t_AB。
-其中，ts1 序列注意需要求逆。
+### 检查内容
 
-## 其他
+#### 1. 时间偏移量检测
 
-1. `dataset.py` 包含了数据集的路径，以及数据集的读取。
+- 使用相关性匹配算法计算IMU和Ground Truth数据的时间偏移
+- 输出最佳时间偏移量（秒）
+- 生成相关性匹配图表
 
-   ```python
-   from dataset import FilePaths, ARCoreData, RTABData
+#### 2. Ground Truth数据间隔分析
 
-   dataset_id = "20251020_173007"
-   paths = FilePaths(dataset_id)
-   arcore = ARCoreData(paths.arcore_csv, id=dataset_id)
-   rtab = RTABData(paths.rtab_db)
-   ```
+- 计算数据频率（Hz）
+- 分析时间间隔的统计信息（最大值、平均值）
+- 识别超过阈值（默认1秒）的异常时间间隔
+- 在异常位置进行标记并生成可视化图表
 
-2. `HandEye.py` 包含了 Hand-Eye 标定算法的实现。标定结果的评估和保存。
-3. `TestOnlyModel.py` 使用 AHRS 旋转数据后，仅使用模型进行轨迹预测。
-4. `CalibrationResults` 标定结果文件夹。
+### 输出示例
+
+```
+频率: 30.15 Hz
+时间间隔 最大/平均: 1.234 s / 0.033 s
+最佳时间偏移量 = 0.125 秒
+```
+
+### 可视化结果
+
+数据检查会生成可视化图表，帮助直观了解数据质量：
+
+![数据检查示例图](docs/CheckData.png)
+
+图表中会标记出异常的时间间隔位置，便于进一步分析和处理。
+
+### 参数说明
+
+- `-d, --dataset`: 指定要检查的单个数据集路径
+- `-g, --group`: 指定要检查的数据组路径（会检查该组下所有数据集）
+- `max_gap_s`: Ground Truth数据最大允许时间间隔（默认2秒）

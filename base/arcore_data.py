@@ -75,10 +75,10 @@ class ARCoreData:
             )
             ax.set_xlabel("X [m]")
             ax.set_ylabel("Y [m]")
-            ax.grid()
+            ax.grid(True)
             ax.set_aspect("equal", "box")
             ax.legend()
             if show:
-                plt.show()
+                fig.show()
         except Exception as e:
             print(f"Error in drawing ARCore data: {e}")

@@ -67,6 +67,9 @@ def interpolate_vector3d(
         fill_value="extrapolate",
     )
     vec3d_new = interp(t_new_us)
+    assert len(vec3d_new) == len(t_new_us), (
+        f"Length mismatch, {len(vec3d_new)} != {len(t_new_us)}"
+    )
     return vec3d_new
 
 
@@ -77,12 +80,12 @@ def pose_interpolate(
 ) -> TimePoseSeries:
     qs = slerp_quaternion(
         qs=cs.qs,
-        t_old_us=cs.ts_us,
+        t_old_us=cs.t_us,
         t_new_us=t_new_us,
     )
     ps = interpolate_vector3d(
         vec3d=cs.ps,
-        t_old_us=cs.ts_us,
+        t_old_us=cs.t_us,
         t_new_us=t_new_us,
     )
     return TimePoseSeries(ts=t_new_us, qs=qs, ps=ps)

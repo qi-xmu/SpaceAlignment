@@ -6,6 +6,7 @@ import pandas as pd
 from pyquaternion import Quaternion
 
 from .datatype import TimePoseSeries
+from .interpolate import interpolate_vector3d, slerp_quaternion
 
 
 @final
@@ -23,6 +24,10 @@ class IMUData:
         self.t_sys_us = np.array([])
         self.imu_freq: float = 0.0
         self.load_data()
+
+    def __len__(self):
+        assert len(self.acce) == len(self.gyro) == len(self.t_sys_us)
+        return len(self.t_sys_us)
 
     def load_data(self) -> None:
         """Load IMU data from CSV file."""
@@ -63,11 +68,31 @@ class IMUData:
             ps=np.zeros((len(self.ahrs_qs[:max_idx]), 3)),
         )
 
+    def interpolate(self, t_new_us: np.ndarray) -> None:
+        self.acce = interpolate_vector3d(
+            vec3d=self.acce, t_old_us=self.t_sys_us, t_new_us=t_new_us
+        )
+        self.gyro = interpolate_vector3d(
+            vec3d=self.gyro, t_old_us=self.t_sys_us, t_new_us=t_new_us
+        )
+        self.ahrs_qs = slerp_quaternion(
+            qs=self.ahrs_qs, t_old_us=self.t_sys_us, t_new_us=t_new_us
+        )
+        self.t_sys_us = t_new_us
+
     def transform_to_world(
         self, *, rots: np.ndarray | None = None, qs: list[Quaternion] | None = None
     ):
         if rots is None and qs is not None:
             rots = np.array([q.rotation_matrix for q in qs])
+        # assert rots is not None, "Either rots or qs must be provided"
+        if rots is None and qs is None:
+            rots = np.array([q.rotation_matrix for q in self.ahrs_qs])
+
+        assert rots is not None, "Either rots or qs must be provided"
+        assert len(rots) == len(self), (
+            f"Length mismatch, got {len(rots)} but expected {len(self)}"
+        )
 
         self.world_acce = np.einsum("ijk,ik->ij", rots, self.acce)  # type: ignore
         self.world_gyro = np.einsum("ijk,ik->ij", rots, self.gyro)  # type: ignore

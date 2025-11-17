@@ -47,7 +47,7 @@ def rerun_init(name: str):
                     )
                 ),
             ),
-            visible=False,
+            # visible=False,
         ),
         rrb.Spatial3DView(
             origin="/",
@@ -124,7 +124,7 @@ def send_gt_data(gt_data: RTABData, calibr_data: CalibrationData):
         cs=gt_data.get_time_pose_series(),
         t_new_us=t_new_us,
     )
-    gt_data.node_t_us, gt_data.node_qs, gt_data.node_ps = cs.ts_us, cs.qs, cs.ps
+    gt_data.node_t_us, gt_data.node_qs, gt_data.node_ps = cs.t_us, cs.qs, cs.ps
 
     times = rr.TimeColumn("timestamp", timestamp=gt_data.node_t_us * 1e-6)
     # rr.log(

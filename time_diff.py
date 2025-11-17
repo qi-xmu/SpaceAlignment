@@ -1,87 +1,89 @@
 import matplotlib.pyplot as plt
 import numpy as np
 from pyquaternion import Quaternion
-from scipy.interpolate import interp1d
 from scipy.signal import correlate
-from scipy.spatial.transform import Rotation
 
-from base import ARCoreData, IMUData, RTABData, UnitPath
-from base.datatype import TimePoseSeries
+from base import ARCoreData, IMUData, RTABData, Time, TimePoseSeries, UnitData
+from base.interpolate import get_time_series, pose_interpolate
 
 
 def get_angvels(
-    t_s: list[int] | np.ndarray,
+    t_us: Time,
     qs: list[Quaternion],
-    step=1,
+    step: int = 1,
 ):
     """获取角速度列表"""
     n = len(qs)
+    step = max(int(step), 1)
     assert n >= 2, "At least two rotations are required"
 
     As: list = []
     Ts = []
     for i in range(0, n - step, step):
         q_ij = qs[i].inverse * qs[i + step]
-        ang_vel = q_ij.angle / (t_s[i + step] - t_s[i])
+        dt_s = (t_us[i + step] - t_us[i]) * 1e-6
+        assert dt_s > 0, "Time difference must be positive"
+        ang_vel = q_ij.angle / dt_s
         As.append(ang_vel)
-        Ts.append(t_s[i])
+        Ts.append(t_us[i])
     return As, Ts
 
 
 def match_correlation(
-    cs1: TimePoseSeries, cs2: TimePoseSeries, min_idx=10, max_idx=200, save=True
-):
+    cs1: TimePoseSeries,
+    cs2: TimePoseSeries,
+    *,
+    time_range=(1, 20),
+    resolution=100,
+    show=False,
+) -> int:
     """使用互相关法匹配Rs1和Rs2"""
-    ts1, qs1 = cs1.ts_us, cs1.qs
-    ts2, qs2 = cs2.ts_us, cs2.qs
+    # 分辨率不能大于时间序列的采样率，否则没有插值的意义
+    resolution = min(resolution, cs1.rate, cs2.rate)
+    # 插值
+    rate = resolution
+    min_idx = int(time_range[0] * rate)
+    max_idx = int(time_range[1] * rate)
+    t_new_us = get_time_series([cs1.t_us, cs2.t_us], rate)[min_idx:max_idx]
+    # 选取范围
+    cs1 = pose_interpolate(cs=cs1, t_new_us=t_new_us)
+    cs2 = pose_interpolate(cs=cs2, t_new_us=t_new_us)
 
-    rate1 = round(1e6 / np.diff(ts1).mean())
-    rate2 = round(1e6 / np.diff(ts2).mean())
-    print(f"序列1频率 = {rate1}, 序列2频率 = {rate2}")
+    print(f"使用时间范围：{(cs1.t_us[-1] - cs1.t_us[0]) / 1e6} 秒")
 
-    Rs1 = qs1[min_idx * rate1 : max_idx * rate1]
-    Rs2 = qs2[min_idx * rate2 : max_idx * rate2]
+    t1_us, qs1 = cs1.t_us, cs1.qs
+    t2_us, qs2 = cs2.t_us, cs2.qs
 
-    rads1, ts1_r = get_angvels(ts1, qs1, step=rate1)
-    rads2, ts2_r = get_angvels(ts2, qs2, step=rate2)
-
-    def resample(ts, vals, new_ts):
-        interp = interp1d(ts, vals, kind="linear", fill_value="extrapolate")
-        return interp(new_ts)
-
-    new_ts = np.linspace(max(ts1_r[0], ts2_r[0]), min(ts1_r[-1], ts2_r[-1]), 1000)
-    seq1 = resample(ts1_r, rads1, new_ts)
-    seq2 = resample(ts2_r, rads2, new_ts)
+    seq1, t_new_us = get_angvels(t1_us, qs1, step=1)
+    seq2, _ = get_angvels(t2_us, qs2, step=1)
 
     corr = correlate(seq1, seq2, mode="full")
     lag_arr = np.arange(-len(seq1) + 1, len(seq1))
     lag = lag_arr[np.argmax(corr)]
-    t21_us = lag * (new_ts[1] - new_ts[0])
+    t21_us = lag * (t_new_us[1] - t_new_us[0])
 
-    return t21_us, new_ts, seq1, seq2
-
-
-def match_correlation_draw(t21_us, ts, seq1, seq2, show=True):
-    # 绘制偏移后的结果
-    fig = plt.figure()
-    ax = fig.add_subplot(111)
-    ax.plot(ts - t21_us, seq1, label="ARCore", alpha=0.5)
-    ax.plot(ts, seq2, label="RTAB", alpha=0.5)
-    ax.set_xlabel("Time (s)")
-    ax.set_ylabel("Angular Velocity (rad/s)")
-    ax.legend()
-    ax.grid()
     if show:
+        fig = plt.figure()
+        ax = fig.add_subplot(111)
+        ax.set_title("Best Time Offset: {:.3f}s".format(t21_us * 1e-6))
+        ax.plot(t_new_us - t21_us, seq1, label="Seq1", alpha=0.5)
+        ax.plot(t_new_us, seq2, label="Seq2", alpha=0.5)
+        ax.set_xlabel("Time (s)")
+        ax.set_ylabel("Angular Velocity (rad/s)")
+        ax.legend()
+        ax.grid()
         plt.show()
+
+    return t21_us
 
 
 def main():
+    # path = "dataset/20251111_204152_SM-G9900"
+    # path = "dataset/001/20251031_01_in/Calibration/20251031_095725_SM-G9900"
     path = "dataset/20251111_204152_SM-G9900"
-    path = "dataset/001/20251031_01_in/Calibration/20251031_095725_SM-G9900"
-    path = "dataset/20251111_204152_SM-G9900"
-    paths = UnitPath(path)
+    paths = UnitData(path)
 
-    arcore = ARCoreData(paths.cam_path)
+    arcore = ARCoreData(paths.cam_path, z_up=False)
     rtab = RTABData(paths.gt_path)
     imu = IMUData(paths.imu_path)
 
@@ -92,10 +94,8 @@ def main():
     cs2 = rtab.get_time_pose_series()
 
     # 互相关时间计算
-    t21_us, ts, seq1, seq2 = match_correlation(cs1, cs2)
+    t21_us = match_correlation(cs1, cs2, show=True)
     print(f"最佳时间偏移量 = {t21_us * 1e-6:.3f} 秒")
-
-    match_correlation_draw(t21_us, ts, seq1, seq2, show=True)
 
 
 if __name__ == "__main__":

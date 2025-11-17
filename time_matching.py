@@ -3,7 +3,7 @@ import os
 import matplotlib.pyplot as plt
 import numpy as np
 
-from base import ARCoreData, RTABData, UnitPath
+from base import ARCoreData, RTABData, UnitData
 from base.datatype import TimePoseSeries
 from time_diff import match_correlation, match_correlation_draw
 
@@ -83,7 +83,7 @@ def nearest_match(
 ):
     assert len(cs1) > 0 or len(cs2) > 0, "cs1 or cs2 is empty"
 
-    ts1, ts2 = cs1.ts_us, cs2.ts_us
+    ts1, ts2 = cs1.t_us, cs2.t_us
     t21_us = 0
 
     if is_t_diff:
@@ -167,7 +167,7 @@ def match_draw(ts1, ts2, matches, show=True, save_path=None):
 
 if __name__ == "__main__":
     path = "dataset/20251111_204152_SM-G9900"
-    params = UnitPath(path)
+    params = UnitData(path)
     rtab_data = RTABData(params.gt_path)
     arcore_data = ARCoreData(params.cam_path)
 

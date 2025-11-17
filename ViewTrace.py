@@ -1,18 +1,24 @@
-from base import ARCoreData, IMUData, RTABData, UnitPath
-from base.space import transform_local, transform_world
+from pathlib import Path
+
+from base import ARCoreData, IMUData, RTABData, UnitData
+from base.datatype import CalibrationData
 from hand_eye import calibrate_b1_b2
 from rerun_ext import rerun_calibration as rrec
 
-if __name__ == "__main__":
-    path = "dataset/001/20251031_01_in/Calibration/20251031_095725_SM-G9900"
-    # path = "dataset/20251111_191453_SM-G9900"
-    # path = "dataset/20251111_192622_SM-G9900"  # fail
-    # path = "dataset/20251111_204152_SM-G9900"
-    # path = "dataset/001/20251031_01_in/20251031_101025_SM-G9900"
-    # path = "dataset/001/20251031_01_in/20251031_102355_SM-G9900"
-    # path = "dataset/001/20251031_01_in/20251031_115654_SM-G9900"
-    # path = "dataset/001/20251031_01_in/20251031_103441_SM-G9900"
-    fp = UnitPath(path)
+
+def view_only(path: Path | str):
+    path = Path(path)
+    fp = UnitData(path)
+    gt_data = RTABData(fp.gt_path)
+    imu_data = IMUData(fp.imu_path)
+    cd = CalibrationData.from_json(fp.calibr_file)
+    rrec.rerun_init("View IMU Data")
+    rrec.send_imu_cam_data(imu_data)
+    rrec.send_gt_data(gt_data, cd)
+
+
+def view_calibration(path: Path | str):
+    fp = UnitData(path)
 
     gt_data = RTABData(fp.gt_path)
     imu_data = IMUData(fp.imu_path)
@@ -46,3 +52,15 @@ if __name__ == "__main__":
     cd.tr_ref_sensor_gt = cd13.rot_ref_sensor_gt @ cd32.tr_ref_sensor_gt
 
     rrec.send_gt_data(gt_data, cd)
+
+
+if __name__ == "__main__":
+    # path = "dataset/001/20251031_01_in/Calibration/20251031_095725_SM-G9900"
+    # path = "dataset/20251111_191453_SM-G9900"
+    # path = "dataset/20251111_192622_SM-G9900"  # fail
+    # path = "dataset/20251111_204152_SM-G9900"
+    path = "dataset/001/20251031_01_in/20251031_101025_SM-G9900"
+    # path = "dataset/001/20251031_01_in/20251031_102355_SM-G9900"
+    # path = "dataset/001/20251031_01_in/20251031_115654_SM-G9900"
+    # path = "dataset/001/20251031_01_in/20251031_103441_SM-G9900"
+    view_only(path)

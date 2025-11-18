@@ -19,7 +19,6 @@ def calibrate_dataset(path: str):
 
 
 def main():
-    default_path = "dataset/001/20251031_01_in/Calibration/20251031_095725_SM-G9900"  # "dataset/20251111_204152_SM-G9900"
     # 读取命令行
     parser = argparse.ArgumentParser(description="Calibration")
     parser.add_argument("-u", "--unit", help="Dataset unit path", required=False)
@@ -30,8 +29,7 @@ def main():
     group = args.group
     dataset = args.dataset
 
-    if unit is None:
-        unit = default_path
+    if unit is not None:
         calibrate_unit(unit)
     elif group is not None:
         calibrate_group(group)

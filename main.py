@@ -1,9 +1,12 @@
-from base import Dataset, IMUData, RTABData
+from base import Dataset, IMUData, RTABData, UnitData
 from base.arcore_data import ARCoreData
 from base.interpolate import get_time_series, interpolate_vector3d, pose_interpolate
 
 if __name__ == "__main__":
-    # fp = FilePath("/Users/qi/Resources/Dataset001")
+    ut = UnitData("dataset/20251111_174914_ABR-AL60")
+    ut2 = UnitData("dataset/20251111_191453_SM-G9900")
+    ut.using_cam
+    ut2.using_cam
 
     exit()
     flatten = fp.flatten()

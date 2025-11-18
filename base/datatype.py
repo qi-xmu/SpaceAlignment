@@ -11,7 +11,6 @@ Pose = tuple[np.ndarray | None, np.ndarray | None]
 Poses = tuple[list[np.ndarray], list[np.ndarray]]
 Time = NDArray[np.int64]
 
-NO_CAM_DEVICES = ["ABR-AL60"]
 SceneType = Literal["in", "out"]  # 场景类型，in 表示室内场景，out 表示室外场景
 DeviceType = Literal[
     "SM-G9900",  # 三星 FE 21 5G
@@ -33,6 +32,7 @@ class UnitData:
     is_z_up: bool
     is_calibr_data: bool
     err_msg: str | None = None
+    using_cam: bool
 
     def __init__(self, base_dir: Path | str):
         self.base_dir = Path(base_dir)
@@ -58,9 +58,13 @@ class UnitData:
         self.calibr_path = calibr_file
         self.is_z_up = False
 
-    @property
-    def using_cam(self):
-        return self.device_name not in NO_CAM_DEVICES
+        # 使用包含 cam 数据
+        try:
+            cam_data = np.loadtxt(self.cam_path, delimiter=",")
+            print(len(cam_data))
+            self.using_cam = len(cam_data) != 0
+        except Exception as _e:
+            self.using_cam = False
 
     def _load_gt_path(self):
         # 优先使用 rtab.csv 文件

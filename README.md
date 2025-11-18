@@ -15,13 +15,13 @@
 #### 检查单个数据集
 
 ```bash
-python Check.py -d dataset/001/20251031_01_in/20251031_101025_SM-G9900
+python DataCheck.py -u dataset/001/20251031_01_in/20251031_101025_SM-G9900
 ```
 
 #### 检查整个数据组
 
 ```bash
-python Check.py -g dataset/001/20251031_01_in
+python DataCheck.py -g dataset/001/20251031_01_in
 ```
 
 ### 检查内容
@@ -57,6 +57,7 @@ python Check.py -g dataset/001/20251031_01_in
 
 ### 参数说明
 
-- `-d, --dataset`: 指定要检查的单个数据集路径
+- `-u, --unit`: 指定要检查的单个数据集路径
 - `-g, --group`: 指定要检查的数据组路径（会检查该组下所有数据集）
+- `-d, --dataset`: 指定整个数据集的路径
 - `max_gap_s`: Ground Truth数据最大允许时间间隔（默认2秒）

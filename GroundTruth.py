@@ -1,7 +1,5 @@
 import argparse
 
-import numpy as np
-
 from base import RTABData, UnitData
 
 if __name__ == "__main__":

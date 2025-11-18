@@ -1,7 +1,13 @@
 import numpy as np
+from numpy.typing import NDArray
 from pyquaternion import Quaternion
 
 from base.datatype import Pose
+
+
+def OrtR(R: NDArray):
+    U, _, Vt = np.linalg.svd(R)
+    return U @ Vt @ np.diag([1, 1, np.linalg.det(U @ Vt)])
 
 
 def transform_world(
@@ -12,7 +18,7 @@ def transform_world(
 ):
     world_rot, world_p = tf_world
     assert world_rot is not None and world_p is not None, "Pose must be valid"
-    world_q = Quaternion(matrix=world_rot)
+    world_q = Quaternion(matrix=OrtR(world_rot))
 
     qs = [world_q * q for q in qs]
     ps = np.einsum("jk,ik->ij", world_rot, ps) + world_p

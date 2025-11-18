@@ -4,7 +4,9 @@ Module for compressing data.
 Author: qi
 License: MIT
 
-目前存在的问题：imu数据没有 t_sys_us 数据
+目前存在的问题：
+1. imu数据没有 t_sys_us 数据
+2. 没有标定数据
 
 Usage:
     python DataCompress.py -d <dataset_path> -o <output_path>
@@ -181,5 +183,3 @@ if __name__ == "__main__":
     print("错误数据：")
     for err in res:
         print(err)
-
-    #

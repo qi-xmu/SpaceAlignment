@@ -24,6 +24,9 @@ class DatasetArgsParser:
         self.parser.add_argument("-g", "--group", type=str, help="Path to group path")
         self.parser.add_argument("-u", "--unit", type=str, help="Path to unit path")
         self.parser.add_argument("-o", "--output", type=str, help="Path to output")
+        self.parser.add_argument(
+            "-r", "--regen", help="Regenerate Dataset", action="store_true"
+        )
 
     def parse(self):
         self.parser.parse_args()

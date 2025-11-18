@@ -61,7 +61,6 @@ class UnitData:
         # 使用包含 cam 数据
         try:
             cam_data = np.loadtxt(self.cam_path, delimiter=",")
-            print(len(cam_data))
             self.using_cam = len(cam_data) != 0
         except Exception as _e:
             self.using_cam = False

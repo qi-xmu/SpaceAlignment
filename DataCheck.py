@@ -58,7 +58,7 @@ class DataChecker:
         res["note"] = "检测两个序列的时间偏移"
         return res
 
-    def check_groundtruth_gap(self, *, max_gap_s=2):
+    def check_groundtruth_gap(self, *, max_gap_s=None):
         res = {}
         ts = self.gt_data.node_t_us
         # 时间差距
@@ -66,6 +66,7 @@ class DataChecker:
         mean_gap = np.mean(ts_diff)
         max_gap = np.max(ts_diff)
         # 查询 大于 max_gap_s 的 索引的所有下标
+        max_gap_s = self.gt_data.rate * 2 if max_gap_s is None else max_gap_s
         idxs = np.where(ts_diff > max_gap_s)[0].tolist()
         ts_diff = ts_diff[idxs].tolist()
 

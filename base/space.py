@@ -33,7 +33,7 @@ def transform_local(
 ):
     local_rot, local_p = tf_local
     assert local_rot is not None and local_p is not None, "Pose must be valid"
-    local_q = Quaternion(matrix=local_rot)
+    local_q = Quaternion(matrix=OrtR(local_rot))
 
     ps = np.array([q.rotate(local_p) for q in qs]) + ps
     qs = [q * local_q for q in qs]

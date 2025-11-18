@@ -53,6 +53,7 @@ def calibrate_T_gc(
     隐含信息：base 和 target 为刚体，gripper 和 camera 为刚体。
     """
     assert len(poses_base_gripper[0]) == len(poses_camera_target[0])
+    assert len(poses_base_gripper[0]) > 10, "Not enough data points"
     # 标定
     if rot_only:
         poses_base_gripper = (
@@ -125,9 +126,9 @@ def _transform_error(RA, tA, RB, tB, RX, tX):
 
 
 def calibrate_b1_b2(
-    *,
     cs_ref1_body1: TimePoseSeries,
     cs_ref2_body2: TimePoseSeries,
+    *,
     calibr_data: CalibrationData = CalibrationData(),
     is_body_calc: bool = True,
     is_ref_calc: bool = True,
@@ -248,22 +249,22 @@ def calibrate_pose_series(
 
 
 def calibrate_unit(
-    path: Path | str,
+    ud: UnitData,
     *,
+    max_time=30,
     using_rerun: bool = True,
 ):
-    print(f"Calibrating {path}")
-    path = Path(path)
-    unit = UnitData(path)
-    imu_data = IMUData(unit.imu_path)
-    gt_data = RTABData(unit.gt_path)
+    print(f"Calibrating {ud.data_id}")
+    imu_data = IMUData(ud.imu_path)
+    gt_data = RTABData(ud.gt_path)
 
-    cs_i = imu_data.get_time_pose_series()
-    cs_g = gt_data.get_time_pose_series()
+    cs_i = imu_data.get_time_pose_series(int(imu_data.rate * max_time))
+    cs_g = gt_data.get_time_pose_series(int(gt_data.rate * max_time))
 
-    if unit.using_cam:
-        cam_data = ARCoreData(unit.cam_path, z_up=unit.is_z_up)
-        cs_c = cam_data.get_time_pose_series()
+    if ud.using_cam:
+        print("Using Camera for calibration")
+        cam_data = ARCoreData(ud.cam_path, z_up=ud.is_z_up)
+        cs_c = cam_data.get_time_pose_series(int(cam_data.rate * max_time))
         notes = "使用相机"
 
         cd, cd_ic = calibrate_pose_series(
@@ -272,31 +273,31 @@ def calibrate_unit(
             cam_series=cs_c,
         )
         if using_rerun:
-            rrec.rerun_init(path.name)
+            rrec.rerun_init(ud.data_id)
             rrec.send_imu_cam_data(imu_data, cam_data, cd_ic)
             rrec.send_gt_data(gt_data, cd)
     else:
+        print("Not using Camera for calibration")
         cd, _ = calibrate_pose_series(
             imu_series=cs_i,
             gt_series=cs_g,
         )
         notes = "未使用相机，为标定位移"
         if using_rerun:
-            rrec.rerun_init(path.name)
+            rrec.rerun_init(ud.data_id)
             rrec.send_imu_cam_data(imu_data)
             rrec.send_gt_data(gt_data, cd)
 
-    cd.to_json(unit.calibr_path, notes)
+    cd.to_json(ud.calibr_path, notes)
     if using_rerun:
-        rr.save(unit.target("data.rrd"))
+        rr.save(ud.target("data.rrd"))
     return cd
 
 
 def calibrate_group(path):
     gp = GroupData(path)
-    for unit in gp.calibr_dir.iterdir():
-        if unit.is_dir():
-            calibrate_unit(unit)
+    for unit in gp.units:
+        calibrate_unit(unit)
 
 
 def load_calibration_data(
@@ -309,6 +310,5 @@ def load_calibration_data(
         cd = CalibrationData.from_json(unit.calibr_path)
     except Exception as _:
         print("-" * 20, f"标定 {unit.device_name}")
-        cd = calibrate_unit(unit.base_dir, using_rerun=using_rerun)
-        cd.to_json(unit.calibr_path)
+        cd = calibrate_unit(unit, max_time=40, using_rerun=using_rerun)
     return cd

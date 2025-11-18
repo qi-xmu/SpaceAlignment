@@ -10,10 +10,10 @@ import pandas as pd
 
 from base import (
     Dataset,
-    FlattenUnitData,
     IMUData,
     RTABData,
     TimePoseSeries,
+    UnitData,
 )
 from base.args_parser import DatasetArgsParser
 from base.interpolate import get_time_series, pose_interpolate
@@ -60,7 +60,7 @@ class TargetPaths:
 
 
 def UnitCovert(
-    unit: FlattenUnitData,
+    unit: UnitData,
     target_root: Path,
     extra: dict | None = None,
     rate: float = 200.0,
@@ -130,11 +130,7 @@ def UnitCovert(
 
 
 if __name__ == "__main__":
-    args = DatasetArgsParser()
-    args.parser.add_argument(
-        "-r", "--regen", help="Regenerate Dataset", action="store_true"
-    )
-    args.parse()
+    args = DatasetArgsParser().parse()
     assert args.dataset is not None, "Dataset path is required"
     assert args.output is not None, "Output path is required"
     dataset_path = Path(args.dataset)
@@ -145,15 +141,30 @@ if __name__ == "__main__":
         output_path.mkdir(parents=True)
 
     ds = Dataset(dataset_path)
-    flatten_data = ds.flatten()
+    # flatten_data = ds.flatten()
     t_len_all_s = 0.0
-    for idx, flatten0 in enumerate(flatten_data):
-        print(f"\n{idx}.", flatten0.data_id, ":", flatten0.base_dir)
-        t_len_s = UnitCovert(
-            flatten0,
-            target_root=output_path.joinpath(flatten0.data_id),
-            regen=regen,
-        )
-        t_len_all_s += t_len_s
+    idx = 0
+    res = []
+    for p in ds.persons:
+        for g in p.groups:
+            for u in g.units:
+                print(f"\n{idx}.", u.data_id, ":", u.base_dir)
+                # TODO 临时不启用 Cam 用于标定
+                u.using_cam = False
+                try:
+                    t_len_s = UnitCovert(
+                        u,
+                        target_root=output_path.joinpath(u.data_id),
+                        regen=regen,
+                    )
+                    t_len_all_s += t_len_s
+                    idx += 1
+                except Exception as e:
+                    res.append((u.base_dir, e))
+
+    if len(res) > 0:
+        print("Error occurred during conversion:")
+        for item in res:
+            print(f"{item[0]}: {item[1]}")
 
     print(f"Done， 数据集总时间： {t_len_all_s / 60:.2f}分钟")

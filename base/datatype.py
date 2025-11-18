@@ -16,7 +16,8 @@ SceneType = Literal["in", "out"]  # 场景类型，in 表示室内场景，out �
 DeviceType = Literal[
     "SM-G9900",  # 三星 FE 21 5G
     "Redmi K30 Pro",  # 红米 k30 pro
-    "ABR-AL60",  # 华为 Mate 60e
+    "ABR-AL60",  # 华为 Mate 60e,
+    "Unknown",  # 未知设备
 ]
 
 
@@ -24,34 +25,37 @@ class UnitData:
     _CALIBR_FILE = "Calibration_{}.json"
 
     data_id: str
+    device_name: DeviceType
     imu_path: Path
     cam_path: Path  # ARCore
     gt_path: Path
-    calibr_file: Path
+    calibr_path: Path
+    is_z_up: bool
+    is_calibr_data: bool
 
     def __init__(self, base_dir: Path | str):
         self.base_dir = Path(base_dir)
         self.data_id = self.base_dir.name
-        _, _, device_name = self.data_id.split("_")
+        # device_name
+        spl = self.data_id.split("_")
+        device_name = spl[2] if len(spl) > 2 else "Unknown"
+        self.device_name = device_name  # type: ignore
 
         self.cam_path = self.base_dir.joinpath("cam.csv")
         self.imu_path = self.base_dir.joinpath("imu.csv")
-        self._load_gt_path()
+        self._load_gt_path()  # self.gt_path
 
-        self.dataset_id = self.base_dir.parent
-        self.device_name = device_name
-        self.calibr_name = self._CALIBR_FILE.format(device_name)
-
-        if "/Calibration" in str(self.base_dir):
-            self.group_path = self.base_dir.parent.parent
-        else:
-            self.group_path = self.base_dir.parent
-
-        calir_file = self.group_path.joinpath(self.calibr_name)
-        if not calir_file.exists():
-            calir_file = self.base_dir.joinpath("Calibration.json")
-        self.calibr_file = calir_file
-        self.z_up = False
+        # 获取 组 名称
+        self.group_path = self.base_dir.parent
+        self.is_calibr_data = "/Calibration" in str(self.base_dir)
+        if self.is_calibr_data:
+            self.group_path = self.group_path.parent
+        # 标定文件
+        calibr_file = self.group_path.joinpath(self._CALIBR_FILE.format(device_name))
+        if not calibr_file.exists():
+            calibr_file = self.base_dir.joinpath("Calibration.json")
+        self.calibr_path = calibr_file
+        self.is_z_up = False
 
     @property
     def using_cam(self):
@@ -80,7 +84,7 @@ class UnitData:
                 "imu_path": self.imu_path,
                 "cam_path": self.cam_path,
                 "gt_path": self.gt_path,
-                "calir_file": self.calibr_file,
+                "calir_file": self.calibr_path,
             }
         )
 
@@ -134,24 +138,12 @@ class FlattenUnitData(UnitData):
     person_id: str | None
     group_id: str
     scene_type: SceneType
-    calibr_file: Path
 
     def __init__(self, person: PersonData | None, group: GroupData, unit: UnitData):
         self.person_id = person.person_id if person is not None else None
         self.group_id = group.group_id
         self.scene_type = group.scene_type
-        self.calibr_file = group.calibr_files[unit.device_name]
-
         super().__init__(unit.base_dir)
-
-    def parse_calibr_file(self):
-        with open(self.calibr_file, "r") as f:
-            data = json.load(f)
-
-        R_gc = np.array(data["rotation_matrix"])
-        t_gc = np.array(data["translation_vector"])
-
-        return R_gc, t_gc
 
 
 class TimePoseSeries:
@@ -159,13 +151,12 @@ class TimePoseSeries:
     CalibrationSeries 类用于存储一系列的校准数据，包括时间戳、旋转矩阵和平移向量
     """
 
-    # timestampe in us
     t_us: Time
     qs: list[Quaternion]
-    ps: np.ndarray
+    ps: NDArray
 
-    def __init__(self, ts: Time, qs: list[Quaternion], ps: np.ndarray):
-        self.t_us = ts
+    def __init__(self, t_us: Time, qs: list[Quaternion], ps: NDArray):
+        self.t_us = t_us
         self.qs = qs
         self.ps = ps
 

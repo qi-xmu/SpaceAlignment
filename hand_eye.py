@@ -261,7 +261,7 @@ def calibrate_unit(
     cs_g = gt_data.get_time_pose_series()
 
     if unit.using_cam:
-        cam_data = ARCoreData(unit.cam_path, z_up=unit.z_up)
+        cam_data = ARCoreData(unit.cam_path, z_up=unit.is_z_up)
         cs_c = cam_data.get_time_pose_series()
         notes = "使用相机"
 
@@ -285,7 +285,7 @@ def calibrate_unit(
             rrec.send_imu_cam_data(imu_data)
             rrec.send_gt_data(gt_data, cd)
 
-    cd.to_json(unit.calibr_file, notes)
+    cd.to_json(unit.calibr_path, notes)
     if using_rerun:
         rr.save(unit.target("data.rrd"))
     return cd
@@ -305,9 +305,9 @@ def load_calibration_data(
 ):
     # 加载 校准数据
     try:
-        cd = CalibrationData.from_json(unit.calibr_file)
+        cd = CalibrationData.from_json(unit.calibr_path)
     except Exception as _:
         print("-" * 20, f"标定 {unit.device_name}")
         cd = calibrate_unit(unit.base_dir, using_rerun=using_rerun)
-        cd.to_json(unit.calibr_file)
+        cd.to_json(unit.calibr_path)
     return cd

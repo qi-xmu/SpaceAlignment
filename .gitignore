@@ -17,3 +17,4 @@ wheels/
 
 /*.csv
 /*.png
+/.env

@@ -81,8 +81,14 @@ def unpack_pose_data(blob_data):
 
 
 class RTABData:
+    rate: float
+
     def __init__(
-        self, file_path: str | Path, calibr_data: CalibrationData | None = None
+        self,
+        file_path: str | Path,
+        calibr_data: CalibrationData | None = None,
+        *,
+        is_load_opt: bool = True,
     ):
         self.file_path = str(file_path)
         self.calibr_data = calibr_data
@@ -107,19 +113,17 @@ class RTABData:
             self.conn = sqlite3.connect(self.file_path)
             self.cursor = self.conn.cursor()
             self.load_node_data()
-            self.load_opt_data()
+            if is_load_opt:
+                self.load_opt_data()
         else:
             raise ValueError("RTAB-Map data file must be a .csv or .db file")
 
         self.t_us_f0 = self.node_t_us - self.node_t_us[0]
         self.t_sys_us = self.node_t_us
-        self.node_freq = 1e6 / np.mean(np.diff(self.node_t_us))
-        # print(
-        #     f"Loaded {len(self.node_ids)} nodes, {len(self.opt_ids)} optimized witch Freq: {self.node_freq:.2f} from the database. "
-        # )
-        # 数据集时长
-        self.t_len_s = (self.node_t_us[-1] - self.node_t_us[0]) / 1e6
-        print(f"数据集时长：{self.t_len_s:.2f} 秒")
+        self.rate = float(1e6 / np.mean(np.diff(self.node_t_us)))
+        print(
+            f"Loaded {len(self.node_ids)} nodes, {len(self.opt_ids)} optimized witch Freq: {self.rate:.2f} from the database. "
+        )
 
     def load_csv_data(self):
         # #timestamp [us],p_RN_x [m],p_RN_y [m],p_RN_z [m],q_RN_w [],q_RN_x [],q_RN_y [],q_RN_z []
@@ -135,6 +139,7 @@ class RTABData:
         admin_opt_poses = self.cursor.execute(
             "SELECT opt_poses FROM Admin WHERE opt_poses IS NOT NULL"
         ).fetchone()
+        assert admin_opt_poses is not None, "Failed to fetch admin_opt_poses data"
         decompressed_data = decompress_and_parse_data(admin_opt_poses[0])
 
         assert decompressed_data is not None, (
@@ -182,7 +187,7 @@ class RTABData:
             ORDER BY id
         """).fetchall()
 
-        assert results, "No node data found in the database."
+        assert results, f"No node data found in the database. {self.file_path}"
 
         node_t_us = []
         node_ps = []
@@ -205,7 +210,7 @@ class RTABData:
     ) -> TimePoseSeries:
         return TimePoseSeries(
             # self.node_t_us  == self.t_sys_us
-            ts=self.node_t_us[:max_idx] if not using_opt else self.opt_t_us[:max_idx],
+            t_us=self.node_t_us[:max_idx] if not using_opt else self.opt_t_us[:max_idx],
             qs=self.node_qs[:max_idx] if not using_opt else self.opt_qs[:max_idx],
             ps=self.node_ps[:max_idx] if not using_opt else self.opt_ps[:max_idx],
         )

@@ -85,7 +85,7 @@ def UnitCovert(
             qs=gt_data.node_qs,
             ps=gt_data.node_ps,
         )
-        cs_g = TimePoseSeries(ts=gt_data.t_sys_us, qs=qs, ps=ps)
+        cs_g = TimePoseSeries(t_us=gt_data.t_sys_us, qs=qs, ps=ps)
         qs, ps = None, None
 
         t_us = get_time_series([gt_data.t_sys_us, imu_data.t_sys_us], rate=rate)

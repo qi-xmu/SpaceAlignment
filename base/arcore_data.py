@@ -6,6 +6,8 @@ from .datatype import TimePoseSeries
 
 
 class ARCoreData:
+    rate: float
+
     def __init__(self, file_path, dataset_id=None, extend=True, z_up=False):
         self.file_path = file_path
         self.extend = extend
@@ -39,7 +41,7 @@ class ARCoreData:
         self.t_us_f0 = self.sensor_t_us - self.sensor_t_us[0]
         self.sensor_qs = self._to_q_obj(self.raw_sensor_qs)
         self.sensor_ps = self._transform_world(self.raw_sensor_ps)
-        self.freq = 1e6 / np.mean(np.diff(self.sensor_t_us))
+        self.rate = float(1e6 / np.mean(np.diff(self.sensor_t_us)))
 
         self.extend = self.raw_data.shape[1] > 8
         if self.extend:
@@ -57,7 +59,7 @@ class ARCoreData:
         self, max_idx: int | None = None, *, using_cam: bool = False
     ) -> TimePoseSeries:
         return TimePoseSeries(
-            ts=self.t_sys_us[:max_idx],
+            t_us=self.t_sys_us[:max_idx],
             qs=self.sensor_qs[:max_idx] if not using_cam else self.cam_qs[:max_idx],
             ps=self.sensor_ps[:max_idx] if not using_cam else self.cam_ps[:max_idx],
         )

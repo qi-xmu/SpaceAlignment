@@ -1,12 +1,10 @@
 #! /Users/qi/Codespace/Android/NAVIO/app/src/main/cpp/SensorFusionAndroid/.venv/bin/python3
-from signal import pause
-from matplotlib import pyplot as plt
-from matplotlib.pylab import f
-import torch
 import numpy as np
 import pandas as pd
-from scipy.spatial.transform import Rotation as R
+import torch
+from matplotlib import pyplot as plt
 from scipy.interpolate import interp1d
+from scipy.spatial.transform import Rotation as R
 
 np.set_printoptions(precision=6, suppress=True)
 
@@ -22,8 +20,7 @@ class LoadModel:
         pass
 
     def get_predict(self, block):
-        inputs = torch.as_tensor(
-            block, dtype=torch.float32, device=self.device)
+        inputs = torch.as_tensor(block, dtype=torch.float32, device=self.device)
         meas, meas_cov = self.model(inputs)
         output = meas.detach().numpy()
         return output
@@ -34,13 +31,7 @@ class LoadDataset:
     加载数据集，使用AHRS转换
     """
 
-    def __init__(
-        self,
-        imu_data_path,
-        step=10,
-        block_size=200,
-        remove_gravity=False
-    ):
+    def __init__(self, imu_data_path, step=10, block_size=200, remove_gravity=False):
         self.step = step
         self.bs = block_size
         self.rm_g = remove_gravity
@@ -59,12 +50,16 @@ class LoadDataset:
     def format_to_spec(t_us, acce, gyro, target_freq=200, allan_calibration=None):
         # 将 IMU 数据插值到目标频率
         out_t_us = np.arange(t_us[0], t_us[-1], 1e6 / target_freq)
-        print("Acce shape:", acce.shape, "Gyro shape:",
-              gyro.shape, "Out_t shape:", out_t_us.shape)
-        f_acce = interp1d(t_us, acce,  axis=0,
-                          fill_value="extrapolate")(out_t_us)
-        f_gyro = interp1d(t_us, gyro,  axis=0,
-                          fill_value="extrapolate")(out_t_us)
+        print(
+            "Acce shape:",
+            acce.shape,
+            "Gyro shape:",
+            gyro.shape,
+            "Out_t shape:",
+            out_t_us.shape,
+        )
+        f_acce = interp1d(t_us, acce, axis=0, fill_value="extrapolate")(out_t_us)
+        f_gyro = interp1d(t_us, gyro, axis=0, fill_value="extrapolate")(out_t_us)
         return (out_t_us, f_acce, f_gyro)
 
     @staticmethod
@@ -76,34 +71,37 @@ class LoadDataset:
         self.acce_rotated = np.zeros_like(self.acce)
 
         for i in range(len(self.ahrs)):
-            self.gyro_rotated[i] = self._rotate_one(
-                self.ahrs_xyzw[i], self.gyro[i])
-            self.acce_rotated[i] = self._rotate_one(
-                self.ahrs_xyzw[i], self.acce[i])
+            self.gyro_rotated[i] = self._rotate_one(self.ahrs_xyzw[i], self.gyro[i])
+            self.acce_rotated[i] = self._rotate_one(self.ahrs_xyzw[i], self.acce[i])
             if self.rm_g:
                 self.acce_rotated[i] -= np.array([0, 0, 9.8])
 
         self.t_us, self.acce_rotated, self.gyro_rotated = self.format_to_spec(
-            self.t_us, self.acce_rotated, self.gyro_rotated)
+            self.t_us, self.acce_rotated, self.gyro_rotated
+        )
         print(
-            f"Rotated IMU to world frame and resampled to {1e6/(self.t_us[1]-self.t_us[0]):.2f} Hz")
+            f"Rotated IMU to world frame and resampled to {1e6 / (self.t_us[1] - self.t_us[0]):.2f} Hz"
+        )
         self.imu_rotated = np.concatenate(
-            (self.gyro_rotated, self.acce_rotated), axis=1)
+            (self.gyro_rotated, self.acce_rotated), axis=1
+        )
 
     def save_rotated(self):
         # 保存文件 pandas
-        imu_rotated_df = pd.DataFrame(self.imu_rotated,
-                                      columns=['gyro_x', 'gyro_y', 'gyro_z',
-                                               'acce_x', 'acce_y', 'acce_z'])
-        imu_rotated_df.insert(0, 'timestamp_us', self.t_us)
+        imu_rotated_df = pd.DataFrame(
+            self.imu_rotated,
+            columns=["gyro_x", "gyro_y", "gyro_z", "acce_x", "acce_y", "acce_z"],
+        )
+        imu_rotated_df.insert(0, "timestamp_us", self.t_us)
         # 输出 8 位小数
         imu_rotated_df = imu_rotated_df.to_csv(
-            'imu_rotated.csv', index=False, float_format='%.8f')
+            "imu_rotated.csv", index=False, float_format="%.8f"
+        )
 
     def get_block(self):
         i = 0
         while i + self.bs < len(self.imu_rotated):
-            block = self.imu_rotated[i:i+self.bs]
+            block = self.imu_rotated[i : i + self.bs]
             i += self.step
             yield block.T.reshape(1, 6, self.bs)
 
@@ -124,25 +122,25 @@ class ResultShow:
         # 绘制 self.cum 的 xyz 坐标,优先绘制2d
         fig = plt.figure(figsize=(18, 8))
         ax1 = fig.add_subplot(111)
-        ax1.plot(self.cum[:, 0], self.cum[:, 1],
-                 linewidth=1, label='Trajectory')
-        ax1.scatter(*self.cum[0, :2], c='g', marker='o',
-                    s=100, label='Trajectory Start')
-        ax1.scatter(*self.cum[-1, :2], c='r', marker='x',
-                    s=100, label='Trajectory End')
+        ax1.plot(self.cum[:, 0], self.cum[:, 1], linewidth=1, label="Trajectory")
+        ax1.scatter(
+            *self.cum[0, :2], c="g", marker="o", s=100, label="Trajectory Start"
+        )
+        ax1.scatter(*self.cum[-1, :2], c="r", marker="x", s=100, label="Trajectory End")
         ax1.legend()
-        ax1.set_xlabel('X [m]')
-        ax1.set_ylabel('Y [m]')
-        ax1.set_title('Trajectory')
+        ax1.set_xlabel("X [m]")
+        ax1.set_ylabel("Y [m]")
+        ax1.set_title("Trajectory")
         # xy等宽
-        ax1.set_aspect('equal')
+        ax1.set_aspect("equal")
         ax1.grid(True)
         plt.show()
 
 
 def main():
     model = LoadModel(
-        "/Users/qi/Codespace/Android/NAVIO/app/src/main/cpp/SensorFusionAndroid/models/ZLX_03.pt")
+        "/Users/qi/Codespace/Android/NAVIO/app/src/main/cpp/SensorFusionAndroid/models/ZLX_03.pt"
+    )
     data = LoadDataset("dataset/20251014_225509/imu.csv")
 
     print("Rotating IMU data...")

@@ -88,7 +88,7 @@ def pose_interpolate(
         t_old_us=cs.t_us,
         t_new_us=t_new_us,
     )
-    return TimePoseSeries(ts=t_new_us, qs=qs, ps=ps)
+    return TimePoseSeries(t_us=t_new_us, qs=qs, ps=ps)
 
 
 def get_time_series(ts_us: list[Time], rate: float = 200.0) -> Time:

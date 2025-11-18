@@ -5,9 +5,8 @@
 一般来说，数据量越多，标定结果越准确。
 """
 
-import argparse
-
 from base import Dataset
+from base.args_parser import DatasetArgsParser
 from hand_eye import calibrate_group, calibrate_unit
 
 
@@ -20,23 +19,14 @@ def calibrate_dataset(path: str):
 
 def main():
     # 读取命令行
-    parser = argparse.ArgumentParser(description="Calibration")
-    parser.add_argument("-u", "--unit", help="Dataset unit path", required=False)
-    parser.add_argument("-g", "--group", help="Group path", required=False)
-    parser.add_argument("-d", "--dataset", help="Dataset path", required=False)
-    args = parser.parse_args()
-    unit = args.unit
-    group = args.group
-    dataset = args.dataset
+    args = DatasetArgsParser().parse()
 
-    if unit is not None:
-        calibrate_unit(unit)
-    elif group is not None:
-        calibrate_group(group)
-    elif dataset is not None:
-        calibrate_dataset(dataset)
-    else:
-        print("No calibration target specified.")
+    if args.unit is not None:
+        calibrate_unit(args.unit)
+    elif args.group is not None:
+        calibrate_group(args.group)
+    elif args.dataset is not None:
+        calibrate_dataset(args.dataset)
 
 
 if __name__ == "__main__":

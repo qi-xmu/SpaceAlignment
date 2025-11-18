@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 # from pprint import pprint
-import argparse
+
 import json
 from pathlib import Path
 
@@ -15,6 +15,7 @@ from base import (
     RTABData,
     TimePoseSeries,
 )
+from base.args_parser import DatasetArgsParser
 from base.interpolate import get_time_series, pose_interpolate
 from base.space import transform_local
 from hand_eye import load_calibration_data
@@ -129,37 +130,28 @@ def UnitCovert(
 
 
 if __name__ == "__main__":
-    arg_parser = argparse.ArgumentParser()
-    arg_parser.add_argument(
-        "-d", "--dataset", type=str, help="Path to the dataset", required=True
-    )
-    arg_parser.add_argument(
-        "-t",
-        "--target",
-        type=str,
-        help="Target directory for saving the dataset",
-        required=True,
-    )
-    arg_parser.add_argument(
+    args = DatasetArgsParser()
+    args.parser.add_argument(
         "-r", "--regen", help="Regenerate Dataset", action="store_true"
     )
-
-    args = arg_parser.parse_args()
+    args.parse()
+    assert args.dataset is not None, "Dataset path is required"
+    assert args.output is not None, "Output path is required"
     dataset_path = Path(args.dataset)
-    target_path = Path(args.target)
+    output_path = Path(args.output)
     regen = args.regen
 
-    if not target_path.exists():
-        target_path.mkdir(parents=True)
+    if not output_path.exists():
+        output_path.mkdir(parents=True)
 
-    ds = Dataset(dataset_path, ["001"])
+    ds = Dataset(dataset_path)
     flatten_data = ds.flatten()
     t_len_all_s = 0.0
     for idx, flatten0 in enumerate(flatten_data):
         print(f"\n{idx}.", flatten0.data_id, ":", flatten0.base_dir)
         t_len_s = UnitCovert(
             flatten0,
-            target_root=target_path.joinpath(flatten0.data_id),
+            target_root=output_path.joinpath(flatten0.data_id),
             regen=regen,
         )
         t_len_all_s += t_len_s

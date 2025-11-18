@@ -99,31 +99,21 @@ class UnitData:
 class GroupData:
     group_id: str
     scene_type: SceneType
-    data: list[UnitData]
-    calibr_files: dict[str, Path]
-    # raw_calibr_path: Path
+    units: list[UnitData]
+    # calibr_files: dict[str, Path]
 
     def __init__(self, base_dir: Path | str):
         base_dir = Path(base_dir)
         ymd, group_id, scene_type = base_dir.name.split("_")
         self.group_id = group_id
         self.scene_type = scene_type  # type: ignore
-        self.data = []
-        self.calibr_files = {}
+        self.units = []
+
+        self.calibr_dir = base_dir.joinpath("Calibration")
         for item in base_dir.iterdir():
             if item.is_dir():
                 if item.name.startswith(ymd):
-                    self.data.append(UnitData(item))
-                # elif item.name.startswith("Calibration"):
-                #     self.raw_calibr_path = item
-            if item.is_file() and item.name.endswith(".json"):
-                name, suffix = item.name.split(".")
-                _, device_type = name.split("_")
-                self.calibr_files[device_type] = item
-
-        # assert self.raw_calibr_path is not None, (
-        #     f"No raw_calibr_path found in {base_dir}"
-        # )
+                    self.units.append(UnitData(item))
 
 
 @dataclass

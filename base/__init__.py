@@ -32,6 +32,6 @@ class Dataset:
         res = []
         for person in self.persons:
             for group in person.groups:
-                for unit in group.data:
+                for unit in group.units:
                     res.append(FlattenUnitData(person, group, unit))
         return res

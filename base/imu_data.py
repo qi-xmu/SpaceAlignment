@@ -11,6 +11,23 @@ from .interpolate import interpolate_vector3d, slerp_quaternion
 
 
 @final
+class IMUColumn:
+    """
+    #timestamp [us],w_RS_S_x [rad s^-1],w_RS_S_y [rad s^-1],w_RS_S_z [rad s^-1],a_RS_S_x [m s^-2],a_RS_S_y [m s^-2],a_RS_S_z [m s^-2],q_RS_w [],q_RS_x [],q_RS_y [],q_RS_z [],t_system [us]
+    #"""
+
+    t = ["#timestamp [us]"]
+    w = ["w_RS_S_x [rad s^-1]", "w_RS_S_y [rad s^-1]", "w_RS_S_z [rad s^-1]"]
+    a = ["a_RS_S_x [m s^-2]", "a_RS_S_y [m s^-2]", "a_RS_S_z [m s^-2]"]
+    q = ["q_RS_w []", "q_RS_x []", "q_RS_y []", "q_RS_z []"]
+    t_sys = ["t_system [us]"]
+
+    all = t + w + a + q + t_sys
+
+    pass
+
+
+@final
 class IMUData:
     t_us: Time
     t_us_f0: Time
@@ -20,16 +37,17 @@ class IMUData:
     gyro: NDArray
     rate: float
 
-    def __init__(self, file_path: str | Path) -> None:
+    def __init__(self, file_path: str | Path, *, t_base_us: int = 0) -> None:
         self.file_path = str(file_path)
         self.ahrs_qs: list[Quaternion] = []
-        self.load_data()
+        self.load_data(t_base_us)
+        self.__len__()
 
     def __len__(self):
         assert len(self.acce) == len(self.gyro) == len(self.t_sys_us)
         return len(self.t_sys_us)
 
-    def load_data(self) -> None:
+    def load_data(self, t_base_us: int = 0) -> None:
         """Load IMU data from CSV file."""
         # timestamp [us],w_RS_S_x [rad s^-1],w_RS_S_y [rad s^-1],w_RS_S_z [rad s^-1],
         # a_RS_S_x [m s^-2],a_RS_S_y [m s^-2],a_RS_S_z [m s^-2],
@@ -54,7 +72,7 @@ class IMUData:
             self.t_sys_us = self.t_sys_us[0] + self.t_us_f0
         else:
             print("Warning: No system timestamp data available")
-            self.t_sys_us = self.t_us
+            self.t_sys_us = self.t_us_f0 + t_base_us
 
         # Calculate IMU frequency
         if len(self.t_us) > 1:
@@ -69,6 +87,24 @@ class IMUData:
             t_us=self.t_sys_us[:max_idx],
             qs=self.ahrs_qs[:max_idx],
             ps=np.zeros((len(self.ahrs_qs[:max_idx]), 3)),
+        )
+
+    def save_csv(self, path: str | Path):
+        path = Path(path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+
+        data = np.hstack(
+            [
+                self.t_us[:, np.newaxis],
+                self.gyro,
+                self.acce,
+                np.array([q.elements for q in self.ahrs_qs]),
+                self.t_sys_us[:, np.newaxis],
+            ]
+        )
+
+        pd.DataFrame(data, columns=IMUColumn.all).to_csv(
+            path, index=False, float_format="%.8f"
         )
 
     def interpolate(self, t_new_us: np.ndarray) -> None:
@@ -99,11 +135,6 @@ class IMUData:
         # rots (i, j, k) acce (i, k) -> (i, j)  (3, 3) (3,1) -> (3,1)
         self.world_acce = np.einsum("ijk,ik->ij", rots, self.acce)  # type: ignore
         self.world_gyro = np.einsum("ijk,ik->ij", rots, self.gyro)  # type: ignore
-
-    def format_to_spec(self, target_freq: int = 200) -> None:
-        """Format data to specified frequency (placeholder method)."""
-        print(f"Formatting to target frequency: {target_freq} Hz")
-        # Implementation would go here
 
 
 if __name__ == "__main__":

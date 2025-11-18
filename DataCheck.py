@@ -1,12 +1,11 @@
-import argparse
 import json
 
-# from pathlib import Path
 import numpy as np
 from matplotlib import pyplot as plt
 
 from base import Dataset, GroupData, IMUData, RTABData, UnitData
 from base.arcore_data import ARCoreData
+from base.args_parser import DatasetArgsParser
 from time_diff import match_correlation
 
 
@@ -85,25 +84,22 @@ class DataChecker:
 
 if __name__ == "__main__":
     # 解析命令行参数，获取数据集路径
-    arg_parser = argparse.ArgumentParser(description="Ground Truth Analysis")
-    arg_parser.add_argument("-u", "--unit", help="Path to the dataset unit")
-    arg_parser.add_argument("-g", "--group", help="Group name")
-    arg_parser.add_argument("-d", "--dataset", help="Path to the dataset")
-    arg_parser.add_argument(
-        "-v", "--visual", action="store_true", help="Visualize the results"
+    args = DatasetArgsParser()
+    args.parser.add_argument(
+        "-v", "--visual", action="store_true", help="Visualize data"
     )
-    args = arg_parser.parse_args()
+    args.parse()
     unit_path = args.unit
     group_path = args.group
     dataset_path = args.dataset
-    visual = args.visual if args.visual else False
+    visual = args.visual
 
     if unit_path:
         ud = UnitData(unit_path)
         DataChecker(ud, is_visual=visual).run_checks()
     elif group_path:
         gd = GroupData(group_path)
-        for ud in gd.data:
+        for ud in gd.units:
             DataChecker(ud, is_visual=visual).run_checks()
     elif dataset_path:
         ds = Dataset(dataset_path)

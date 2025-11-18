@@ -13,9 +13,10 @@ Usage:
 """
 
 import argparse
+import os
 from pathlib import Path
 
-from base import RTABData
+from base import ARCoreData, IMUData, RTABData
 
 """
 数据读取。
@@ -42,16 +43,15 @@ class Target:
 
     def unit(self, data_id: str, device_name: str):
         group_name = self.group_fmt.format(device_name, self.scene_name)
-        unit_dir = (
+        unit_path = (
             self.target_path.joinpath(self.person)
             .joinpath(group_name)
             .joinpath(f"{data_id}_{device_name}")
         )
-        unit_dir.mkdir(parents=True, exist_ok=True)
-        imu_path = unit_dir.joinpath("imu.csv")
-        cam_path = unit_dir.joinpath("cam.csv")
-        gt_path = unit_dir.joinpath("rtab.csv")
-        return (imu_path, cam_path, gt_path)
+        imu_path = unit_path.joinpath("imu.csv")
+        cam_path = unit_path.joinpath("cam.csv")
+        gt_path = unit_path.joinpath("rtab.csv")
+        return (unit_path, imu_path, cam_path, gt_path)
 
 
 class CompressUnitData:
@@ -82,8 +82,6 @@ class CompressUnitData:
             self.err_msg = e.__str__()
             return
 
-        # print(self.data_id, self.err_msg)
-
     def _load_gt_path(self):
         # 优先使用 rtab.csv 文件
         gt_path = self.gt_path
@@ -107,20 +105,28 @@ class CompressUnitData:
     def compress(self, target: Target, *, regen: bool = False):
         if self.err_msg:
             return
-
-        gt_data = RTABData(self.gt_path, is_load_opt=False)
-        new_imu_path, new_cam_path, new_gt_path = target.unit(
+        t_base_us = 0
+        unit_path, new_imu_path, new_cam_path, new_gt_path = target.unit(
             self.data_id, self.device_name
         )
-        if (
-            not new_imu_path.exists()
-            or not new_cam_path.exists()
-            or not new_gt_path.exists()
-            or regen
-        ):
+
+        if not new_imu_path.exists() or regen:
+            gt_data = RTABData(self.gt_path, is_load_opt=False)
+            unit_path.mkdir(parents=True, exist_ok=True)
             gt_data.save_csv(new_gt_path)
-            self.copy_file(self.imu_path, new_imu_path)
-            self.copy_file(self.cam_path, new_cam_path)
+        else:
+            gt_data = RTABData(new_gt_path)
+        t_base_us = gt_data.t_sys_us[0]
+
+        if not new_imu_path.exists() or regen:
+            imu_data = IMUData(self.imu_path, t_base_us=t_base_us)
+            imu_data.save_csv(new_imu_path)
+
+        # if not new_cam_path.exists() or regen:
+        cam_data = ARCoreData(self.cam_path, z_up=True, t_base_us=t_base_us)
+        cam_data.save_csv(new_cam_path)
+
+        return unit_path
 
     def compress_catch(self, target: Target, *, regen: bool = False):
         try:
@@ -148,7 +154,6 @@ class DeviceData:
         ]
         self.fail_units = [it for it in self.all_units if it.err_msg]
         self.units = [it for it in self.all_units if not it.err_msg]
-        # print(self.device_name, len(self.units))
 
 
 class RuijieData:
@@ -160,13 +165,22 @@ class RuijieData:
         self.devices = [DeviceData(it) for it in self.base_dir.iterdir() if it.is_dir()]
 
 
+def move_dir(src: Path, dst: Path) -> None:
+    dst.mkdir(parents=True, exist_ok=True)
+    cmd = f"mv {src} {dst}"
+    os.system(cmd)
+    print(f"Moved {src} to {dst}")
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Compress data")
     parser.add_argument("-d", "--dataset", help="Path to the dataset file")
     parser.add_argument("-o", "--output", help="Path to the output file")
+    parser.add_argument("-r", "--regen", action="store_true", help="Regenerate data")
     args = parser.parse_args()
     dataset_path = Path(args.dataset)
     output_path = Path(args.output)
+    regen = args.regen
 
     if not output_path.exists():
         output_path.mkdir(parents=True)
@@ -174,12 +188,20 @@ if __name__ == "__main__":
     rd = RuijieData(dataset_path)
     tg = Target(output_path)
     res = []
-    for device in rd.devices:
-        for unit in device.units:
-            err = unit.compress_catch(tg)
+    for i, device in enumerate(rd.devices):
+        for j, unit in enumerate(device.units):
+            print(f"\n{i}-{j} {unit.base_dir} ...")
+            err = unit.compress_catch(tg, regen=regen)
             if err:
-                res.append(err)
+                res.append((unit.base_dir, err))
+                print(f"错误信息：{err}")
+            else:
+                print("成功")
 
-    print("错误数据：")
-    for err in res:
-        print(err)
+    if len(res):
+        print("错误数据：")
+        for path, err in res:
+            print(path, err)
+            move_dir(path, output_path.parent / "Error")
+            with open(output_path / "Error" / "error.log", "a") as f:
+                print(f"{path} {err}", file=f)

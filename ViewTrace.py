@@ -1,6 +1,7 @@
 from pathlib import Path
 
 from base import ARCoreData, IMUData, RTABData, UnitData
+from base.args_parser import DatasetArgsParser
 from hand_eye import calibrate_b1_b2, load_calibration_data
 from rerun_ext import rerun_calibration as rrec
 
@@ -54,12 +55,6 @@ def view_calibration(path: Path | str):
 
 
 if __name__ == "__main__":
-    # path = "dataset/001/20251031_01_in/Calibration/20251031_095725_SM-G9900"
-    # path = "dataset/20251111_191453_SM-G9900"
-    # path = "dataset/20251111_192622_SM-G9900"  # fail
-    # path = "dataset/20251111_204152_SM-G9900"
-    path = "dataset/001/20251031_01_in/20251031_101025_SM-G9900"
-    # path = "dataset/001/20251031_01_in/20251031_102355_SM-G9900"
-    # path = "dataset/001/20251031_01_in/20251031_115654_SM-G9900"
-    # path = "dataset/001/20251031_01_in/20251031_103441_SM-G9900"
-    view_only(path)
+    args = DatasetArgsParser().parse()
+    assert args.unit is not None, "Unit data path is required"
+    view_only(args.unit)

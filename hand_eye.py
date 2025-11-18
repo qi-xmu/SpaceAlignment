@@ -3,6 +3,7 @@ from pathlib import Path
 import cv2
 import numpy as np
 import rerun as rr
+from numpy._typing import NDArray
 
 import rerun_ext.rerun_calibration as rrec
 from base import (
@@ -28,20 +29,20 @@ class HandEyeAlg:
     Daniilidis = cv2.CALIB_HAND_EYE_DANIILIDIS
 
 
-def invert_transform(R, t) -> tuple[np.ndarray, np.ndarray]:
+def invert_transform(R: NDArray, t: NDArray):
     R_inv = R.T
     t_inv = -R_inv @ t
     return R_inv, t_inv
 
 
-def compose_transform(R1, t1, R2, t2) -> tuple[np.ndarray, np.ndarray]:
+def compose_transform(R1: NDArray, t1: NDArray, R2: NDArray, t2: NDArray):
     """T1 * T2"""
     R = R1 @ R2
     t = R1 @ t2 + t1
     return R, t
 
 
-def calibrate_pose_gripper_camera(
+def calibrate_T_gc(
     poses_base_gripper: Poses,
     poses_camera_target: Poses,
     pose_camera_gripper=(None, None),
@@ -146,13 +147,13 @@ def calibrate_b1_b2(
         print("> 计算刚体之间的变换：")
         poses_ref1_body1 = cs1.get_all()
         poses_body2_ref2 = cs2.get_all(inverse=True)
-        pose_body1_body2 = calibrate_pose_gripper_camera(
+        pose_body1_body2 = calibrate_T_gc(
             poses_ref1_body1,
             poses_body2_ref2,
             (calibr_data.rot_sensor_gt, calibr_data.tr_sensor_gt),
             rot_only=rot_only,
         )
-        err_b1_b2 = evaluate(
+        err_b1_b2 = calibrate_evaluate(
             pose_body1_body2, poses_ref1_body1, poses_body2_ref2, rot_only=rot_only
         )
         poses_ref1_body1, poses_body2_ref2 = None, None
@@ -164,13 +165,13 @@ def calibrate_b1_b2(
         print("> 计算参考坐标系之间的变换：")
         poses_body1_ref1 = cs1.get_all(inverse=True)
         poses_ref2_body2 = cs2.get_all()
-        pose_ref1_ref2 = calibrate_pose_gripper_camera(
+        pose_ref1_ref2 = calibrate_T_gc(
             poses_body1_ref1,
             poses_ref2_body2,
             (calibr_data.rot_ref_sensor_gt, calibr_data.tr_ref_sensor_gt),
             rot_only=rot_only,
         )
-        err_r1_r2 = evaluate(
+        err_r1_r2 = calibrate_evaluate(
             pose_ref1_ref2, poses_body1_ref1, poses_ref2_body2, rot_only=rot_only
         )
         poses_body1_ref1, poses_ref2_body2 = None, None
@@ -187,7 +188,7 @@ def calibrate_b1_b2(
     return cd
 
 
-def evaluate(pose_gc: Pose, poses_bg, poses_ct, *, rot_only=False):
+def calibrate_evaluate(pose_gc: Pose, poses_bg, poses_ct, *, rot_only=False):
     rot_errors = []
     trans_errors = []
     if rot_only:
@@ -293,7 +294,7 @@ def calibrate_unit(
 
 def calibrate_group(path):
     gp = GroupData(path)
-    for unit in gp.raw_calibr_path.iterdir():
+    for unit in gp.calibr_dir.iterdir():
         if unit.is_dir():
             calibrate_unit(unit)
 

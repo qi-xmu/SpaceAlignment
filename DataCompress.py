@@ -4,6 +4,8 @@ Module for compressing data.
 Author: qi
 License: MIT
 
+目前存在的问题：imu数据没有 t_sys_us 数据
+
 Usage:
     python DataCompress.py -d <dataset_path> -o <output_path>
 """
@@ -32,13 +34,16 @@ class Target:
 
     def __init__(self, target_path: Path | str):
         self.target_path = Path(target_path)
+        self.person = "001"  # 默认人员
         self.group_fmt = "2025_{}_{}"  # 默认组名称
         self.scene_name = "in"  # 默认场景 indoor
 
     def unit(self, data_id: str, device_name: str):
         group_name = self.group_fmt.format(device_name, self.scene_name)
-        unit_dir = self.target_path.joinpath(group_name).joinpath(
-            f"{data_id}_{device_name}"
+        unit_dir = (
+            self.target_path.joinpath(self.person)
+            .joinpath(group_name)
+            .joinpath(f"{data_id}_{device_name}")
         )
         unit_dir.mkdir(parents=True, exist_ok=True)
         imu_path = unit_dir.joinpath("imu.csv")
@@ -101,6 +106,7 @@ class CompressUnitData:
         if self.err_msg:
             return
 
+        gt_data = RTABData(self.gt_path, is_load_opt=False)
         new_imu_path, new_cam_path, new_gt_path = target.unit(
             self.data_id, self.device_name
         )
@@ -110,7 +116,7 @@ class CompressUnitData:
             or not new_gt_path.exists()
             or regen
         ):
-            RTABData(self.gt_path, is_load_opt=False).save_csv(new_gt_path)
+            gt_data.save_csv(new_gt_path)
             self.copy_file(self.imu_path, new_imu_path)
             self.copy_file(self.cam_path, new_cam_path)
 

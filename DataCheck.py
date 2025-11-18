@@ -1,29 +1,28 @@
 import argparse
 import json
-from pathlib import Path
 
+# from pathlib import Path
 import numpy as np
+from matplotlib import pyplot as plt
 
-from base import GroupData, IMUData, RTABData, UnitData
+from base import Dataset, GroupData, IMUData, RTABData, UnitData
 from base.arcore_data import ARCoreData
 from time_diff import match_correlation
 
 
 class DataChecker:
-    def __init__(self, ud: UnitData):
+    def __init__(self, ud: UnitData, *, is_visual: bool = True):
         self.ud = ud
         self.imu_data = IMUData(ud.imu_path)
         self.gt_data = RTABData(ud.gt_path)
         if self.ud.using_cam:
             self.cam_data = ARCoreData(ud.cam_path)
 
-    def check_all(self):
+        self.is_visual = is_visual
+
+    def run_checks(self):
         properties = dir(self)
-        check_method = [
-            method
-            for method in properties
-            if method.startswith("check_") and method != "check_all"
-        ]
+        check_method = [method for method in properties if method.startswith("check_")]
         check_list = {
             "data_path": str(self.ud.base_dir),
             "device_name": self.ud.device_name,
@@ -32,7 +31,7 @@ class DataChecker:
             check_list[method] = getattr(self, method)()
 
         check_json_str = json.dumps(check_list, indent=4, ensure_ascii=False)
-        save_path = self.ud.base_dir.joinpath("data_check.json")
+        save_path = self.ud.base_dir.joinpath("DataCheck.json")
         save_path.parent.mkdir(parents=True, exist_ok=True)
         with open(save_path, "w") as f:
             f.write(check_json_str)
@@ -55,7 +54,7 @@ class DataChecker:
         cs1 = self.imu_data.get_time_pose_series()
         cs2 = self.gt_data.get_time_pose_series()
 
-        t21_us = match_correlation(cs1, cs2, show=True)
+        t21_us = match_correlation(cs1, cs2, show=False)
         res["time_diff_21_us"] = t21_us
         res["note"] = "检测两个序列的时间偏移"
         return res
@@ -71,13 +70,11 @@ class DataChecker:
         idxs = np.where(ts_diff > max_gap_s)[0].tolist()
         ts_diff = ts_diff[idxs].tolist()
 
-        if max_gap > max_gap_s and False:
-            # 查找最大间隔出现的时间
-            self.gt_data.draw(
-                mark_idxs=(idxs, ts_diff),
-                show=False,
-                save_path=self.ud.target("Trajectory.png"),
-            )
+        self.gt_data.draw(
+            mark_idxs=(idxs, ts_diff),
+            show=False,
+            save_path=self.ud.target("Trajectory.png"),
+        )
         res["max_gap"] = max_gap
         res["mean_gap"] = mean_gap
         res["gap_idxs"] = idxs
@@ -87,28 +84,32 @@ class DataChecker:
 
 
 if __name__ == "__main__":
-    default_dataset_path = "dataset/001/20251031_01_in/20251031_101025_SM-G9900"
-    default_dataset_path = "dataset/001/20251031_01_in/20251031_102355_SM-G9900"
-    default_dataset_path = "dataset/001/20251031_01_in/20251031_103441_SM-G9900"
-
     # 解析命令行参数，获取数据集路径
     arg_parser = argparse.ArgumentParser(description="Ground Truth Analysis")
     arg_parser.add_argument("-u", "--unit", help="Path to the dataset unit")
     arg_parser.add_argument("-g", "--group", help="Group name")
+    arg_parser.add_argument("-d", "--dataset", help="Path to the dataset")
+    arg_parser.add_argument(
+        "-v", "--visual", action="store_true", help="Visualize the results"
+    )
     args = arg_parser.parse_args()
-    dataset: str = args.unit
-    group = args.group if args.group else "dataset/001/20251031_01_in"
+    unit_path = args.unit
+    group_path = args.group
+    dataset_path = args.dataset
+    visual = args.visual if args.visual else False
 
-    if dataset:
-        ud = UnitData(dataset)
-        checker = DataChecker(ud)
-        checker.check_groundtruth_gap()
-        checker.check_time_diff()
-    elif group:
-        gd = GroupData(group)
+    if unit_path:
+        ud = UnitData(unit_path)
+        DataChecker(ud, is_visual=visual).run_checks()
+    elif group_path:
+        gd = GroupData(group_path)
         for ud in gd.data:
-            checker = DataChecker(ud)
-            checker.check_all()
-            # checker.check_groundtruth_gap()
-            # checker.check_time_diff()
-            break
+            DataChecker(ud, is_visual=visual).run_checks()
+    elif dataset_path:
+        ds = Dataset(dataset_path)
+        for ud in ds.flatten():
+            DataChecker(ud, is_visual=visual).run_checks()
+
+    if visual:
+        plt.show()
+    print("Analysis completed.")

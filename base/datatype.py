@@ -32,6 +32,7 @@ class UnitData:
     calibr_path: Path
     is_z_up: bool
     is_calibr_data: bool
+    err_msg: str | None = None
 
     def __init__(self, base_dir: Path | str):
         self.base_dir = Path(base_dir)
@@ -43,7 +44,7 @@ class UnitData:
 
         self.cam_path = self.base_dir.joinpath("cam.csv")
         self.imu_path = self.base_dir.joinpath("imu.csv")
-        self._load_gt_path()  # self.gt_path
+        self.gt_path = self._load_gt_path()  # self.gt_path
 
         # 获取 组 名称
         self.group_path = self.base_dir.parent
@@ -63,17 +64,18 @@ class UnitData:
 
     def _load_gt_path(self):
         # 优先使用 rtab.csv 文件
-        self.gt_path = self.base_dir.joinpath("rtab.csv")
-        if self.gt_path.exists():
-            return
+        gt_path = self.base_dir.joinpath("rtab.csv")
+        if gt_path.exists():
+            return gt_path
 
         # 检查此文件夹下文件，选中第一个后缀为 db 的文件
         for file in self.base_dir.iterdir():
             if file.suffix == ".db":
-                self.gt_path = file
+                gt_path = file
                 break
         else:
-            raise FileNotFoundError(f"No .db file found in {self.base_dir}")
+            self.err_msg = f"No .db file found in {self.base_dir}"
+        return gt_path
 
     def target(self, target_name) -> Path:
         return self.base_dir.joinpath(target_name)
@@ -95,7 +97,7 @@ class GroupData:
     scene_type: SceneType
     data: list[UnitData]
     calibr_files: dict[str, Path]
-    raw_calibr_path: Path
+    # raw_calibr_path: Path
 
     def __init__(self, base_dir: Path | str):
         base_dir = Path(base_dir)
@@ -108,16 +110,16 @@ class GroupData:
             if item.is_dir():
                 if item.name.startswith(ymd):
                     self.data.append(UnitData(item))
-                elif item.name.startswith("Calibration"):
-                    self.raw_calibr_path = item
+                # elif item.name.startswith("Calibration"):
+                #     self.raw_calibr_path = item
             if item.is_file() and item.name.endswith(".json"):
                 name, suffix = item.name.split(".")
                 _, device_type = name.split("_")
                 self.calibr_files[device_type] = item
 
-        assert self.raw_calibr_path is not None, (
-            f"No raw_calibr_path found in {base_dir}"
-        )
+        # assert self.raw_calibr_path is not None, (
+        #     f"No raw_calibr_path found in {base_dir}"
+        # )
 
 
 @dataclass
@@ -153,9 +155,9 @@ class TimePoseSeries:
 
     t_us: Time
     qs: list[Quaternion]
-    ps: NDArray
+    ps: NDArray[np.float64]
 
-    def __init__(self, t_us: Time, qs: list[Quaternion], ps: NDArray):
+    def __init__(self, t_us: Time, qs: list[Quaternion], ps: NDArray[np.float64]):
         self.t_us = t_us
         self.qs = qs
         self.ps = ps

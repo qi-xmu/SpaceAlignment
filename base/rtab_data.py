@@ -82,6 +82,7 @@ def unpack_pose_data(blob_data):
 
 class RTABData:
     rate: float
+    t_len_s: float
 
     def __init__(
         self,
@@ -121,6 +122,7 @@ class RTABData:
         self.t_us_f0 = self.node_t_us - self.node_t_us[0]
         self.t_sys_us = self.node_t_us
         self.rate = float(1e6 / np.mean(np.diff(self.node_t_us)))
+        self.t_len_s = (self.node_t_us[-1] - self.node_t_us[0]) / 1e6
         print(
             f"Loaded {len(self.node_ids)} nodes, {len(self.opt_ids)} optimized witch Freq: {self.rate:.2f} from the database. "
         )
@@ -274,7 +276,7 @@ class RTABData:
             # 设置 字体大小
             ax.legend(fontsize=8)
             if show:
-                plt.show()
+                fig.show()
 
             if save_path:
                 fig.savefig(save_path, dpi=300)

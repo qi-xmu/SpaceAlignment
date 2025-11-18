@@ -52,6 +52,9 @@ class IMUData:
         if self.extend:
             self.t_sys_us = raw_data[:, 11].astype(np.int64)  # 1970 us
             self.t_sys_us = self.t_sys_us[0] + self.t_us_f0
+        else:
+            print("Warning: No system timestamp data available")
+            self.t_sys_us = self.t_us
 
         # Calculate IMU frequency
         if len(self.t_us) > 1:
@@ -85,7 +88,7 @@ class IMUData:
     ):
         if rots is None and qs is not None:
             rots = np.array([q.rotation_matrix for q in qs])
-        # assert rots is not None, "Either rots or qs must be provided"
+        # 默认使用 AHRS 的数据进行变换
         if rots is None and qs is None:
             rots = np.array([q.rotation_matrix for q in self.ahrs_qs])
 
@@ -93,7 +96,7 @@ class IMUData:
         assert len(rots) == len(self), (
             f"Length mismatch, got {len(rots)} but expected {len(self)}"
         )
-
+        # rots (i, j, k) acce (i, k) -> (i, j)  (3, 3) (3,1) -> (3,1)
         self.world_acce = np.einsum("ijk,ik->ij", rots, self.acce)  # type: ignore
         self.world_gyro = np.einsum("ijk,ik->ij", rots, self.gyro)  # type: ignore
 

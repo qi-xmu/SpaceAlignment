@@ -62,16 +62,17 @@ def match_correlation(
     lag = lag_arr[np.argmax(corr)]
     t21_us = lag * (t_new_us[1] - t_new_us[0])
 
+
+    fig = plt.figure()
+    ax = fig.add_subplot(111)
+    ax.set_title("Best Time Offset: {:.3f}s".format(t21_us * 1e-6))
+    ax.plot(t_new_us - t21_us, seq1, label="Seq1", alpha=0.5)
+    ax.plot(t_new_us, seq2, label="Seq2", alpha=0.5)
+    ax.set_xlabel("Time (s)")
+    ax.set_ylabel("Angular Velocity (rad/s)")
+    ax.legend()
+    ax.grid()
     if show:
-        fig = plt.figure()
-        ax = fig.add_subplot(111)
-        ax.set_title("Best Time Offset: {:.3f}s".format(t21_us * 1e-6))
-        ax.plot(t_new_us - t21_us, seq1, label="Seq1", alpha=0.5)
-        ax.plot(t_new_us, seq2, label="Seq2", alpha=0.5)
-        ax.set_xlabel("Time (s)")
-        ax.set_ylabel("Angular Velocity (rad/s)")
-        ax.legend()
-        ax.grid()
         plt.show()
 
     return int(t21_us)

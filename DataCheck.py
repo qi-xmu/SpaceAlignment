@@ -3,9 +3,9 @@ import json
 import numpy as np
 from matplotlib import pyplot as plt
 
-from base import Dataset, GroupData, IMUData, RTABData, UnitData
-from base.arcore_data import ARCoreData
+from base.action import dataset_action
 from base.args_parser import DatasetArgsParser
+from base.datatype import ARCoreData, Dataset, GroupData, IMUData, RTABData, UnitData
 from time_diff import match_correlation
 
 
@@ -104,8 +104,11 @@ if __name__ == "__main__":
             DataChecker(ud, is_visual=visual).run_checks()
     elif dataset_path:
         ds = Dataset(dataset_path)
-        for ud in ds.flatten():
+
+        def action(ud):
             DataChecker(ud, is_visual=visual).run_checks()
+
+        dataset_action(ds, action)
 
     if visual:
         plt.show()

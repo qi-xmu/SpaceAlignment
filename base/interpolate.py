@@ -2,7 +2,7 @@ import numpy as np
 from pyquaternion import Quaternion
 from scipy.interpolate import interp1d
 
-from base.datatype import Time, TimePoseSeries
+from .basetype import Time
 
 
 def slerp_quaternion(
@@ -15,7 +15,7 @@ def slerp_quaternion(
     t_new_us = np.array(t_new_us)
 
     assert t_new_us[0] >= t_old_us[0] and t_new_us[-1] <= t_old_us[-1], (
-        f"t: [{t_new_us[0] - t_old_us[0]} - {t_new_us[-1] - t_old_us[-1]}]"
+        f"Error, t: [{t_new_us[0] - t_old_us[0]} - {t_new_us[-1] - t_old_us[-1]}]"
     )
 
     n_old = len(t_old_us)
@@ -73,29 +73,25 @@ def interpolate_vector3d(
     return vec3d_new
 
 
-def pose_interpolate(
+def get_time_series(
+    ts_us: list[Time],
+    t_start_s: int | None = None,
+    t_end_s: int | None = None,
     *,
-    cs: TimePoseSeries,
-    t_new_us: Time,
-) -> TimePoseSeries:
-    qs = slerp_quaternion(
-        qs=cs.qs,
-        t_old_us=cs.t_us,
-        t_new_us=t_new_us,
-    )
-    ps = interpolate_vector3d(
-        vec3d=cs.ps,
-        t_old_us=cs.t_us,
-        t_new_us=t_new_us,
-    )
-    return TimePoseSeries(t_us=t_new_us, qs=qs, ps=ps)
-
-
-def get_time_series(ts_us: list[Time], rate: float = 200.0) -> Time:
+    rate: float = 200.0,
+) -> Time:
     t_start_us = max([t[0] for t in ts_us])
     t_end_us = min([t[-1] for t in ts_us])
     interval = 1e6 / rate
-    t_us = np.arange(t_start_us + interval, t_end_us - interval, interval)
+    assert t_start_us < t_end_us, (
+        "Time series must be non-empty and have a valid interval"
+    )
+    t_us = np.arange(t_start_us, t_end_us, interval, dtype=np.int64)
+    # 限制时间轴长度
+    start_idx = 0 if t_start_s is None else int(max(t_start_s * rate, 0))
+    end_idx = len(t_us) if t_end_s is None else int(min(t_end_s * rate, len(t_us)))
+    t_us = t_us[start_idx:end_idx]
+
     assert t_us[0] >= t_start_us and t_us[-1] <= t_end_us, (
         "t_us must be within t_start_us and t_end_us"
     )

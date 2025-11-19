@@ -3,8 +3,8 @@ import numpy as np
 from pyquaternion import Quaternion
 from scipy.signal import correlate
 
-from base import ARCoreData, IMUData, RTABData, Time, TimePoseSeries, UnitData
-from base.interpolate import get_time_series, pose_interpolate
+from base.datatype import ARCoreData, IMUData, RTABData, Time, TimePoseSeries, UnitData
+from base.interpolate import get_time_series
 
 
 def get_angvels(
@@ -40,22 +40,15 @@ def match_correlation(
     """使用互相关法匹配Rs1和Rs2"""
     # 分辨率不能大于时间序列的采样率，否则没有插值的意义
     resolution = min(resolution, cs1.rate, cs2.rate)
-    # 插值
-    rate = resolution
-    min_idx = int(time_range[0] * rate)
-    max_idx = int(time_range[1] * rate)
-    t_new_us = get_time_series([cs1.t_us, cs2.t_us], rate)[min_idx:max_idx]
-    # 选取范围
-    cs1 = pose_interpolate(cs=cs1, t_new_us=t_new_us)
-    cs2 = pose_interpolate(cs=cs2, t_new_us=t_new_us)
 
+    t_new_us = get_time_series([cs1.t_us, cs2.t_us], *time_range, rate=resolution)
+    cs1 = cs1.interpolate(t_new_us)
+    cs2 = cs2.interpolate(t_new_us)
     print(f"使用时间范围：{(cs1.t_us[-1] - cs1.t_us[0]) / 1e6} 秒")
 
-    t1_us, qs1 = cs1.t_us, cs1.qs
-    t2_us, qs2 = cs2.t_us, cs2.qs
-
-    seq1, t_new_us = get_angvels(t1_us, qs1, step=1)
-    seq2, _ = get_angvels(t2_us, qs2, step=1)
+    seq1, t1 = get_angvels(cs1.t_us, cs1.qs, step=1)
+    seq2, t2 = get_angvels(cs2.t_us, cs2.qs, step=1)
+    t_new_us = t1
 
     corr = correlate(seq1, seq2, mode="full")
     lag_arr = np.arange(-len(seq1) + 1, len(seq1))
@@ -93,8 +86,10 @@ def main():
     cs2 = rtab.get_time_pose_series()
 
     # 互相关时间计算
+
     t21_us = match_correlation(cs1, cs2, show=True)
     print(f"最佳时间偏移量 = {t21_us * 1e-6:.3f} 秒")
+    plt.show()
 
 
 if __name__ == "__main__":

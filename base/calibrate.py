@@ -1,12 +1,13 @@
-from pathlib import Path
-
 import cv2
 import numpy as np
 import rerun as rr
 from numpy._typing import NDArray
 
 import rerun_ext.rerun_calibration as rrec
-from base import (
+from base.interpolate import get_time_series
+from time_diff import match_correlation
+
+from .datatype import (
     ARCoreData,
     CalibrationData,
     GroupData,
@@ -17,8 +18,6 @@ from base import (
     TimePoseSeries,
     UnitData,
 )
-from base.interpolate import get_time_series, pose_interpolate
-from time_diff import match_correlation
 
 
 class HandEyeAlg:
@@ -42,7 +41,7 @@ def compose_transform(R1: NDArray, t1: NDArray, R2: NDArray, t2: NDArray):
     return R, t
 
 
-def calibrate_T_gc(
+def _calibrate_T_gc(
     poses_base_gripper: Poses,
     poses_camera_target: Poses,
     pose_camera_gripper=(None, None),
@@ -52,8 +51,10 @@ def calibrate_T_gc(
     """calibrateHandEye return R_gc, t_gc
     隐含信息：base 和 target 为刚体，gripper 和 camera 为刚体。
     """
-    assert len(poses_base_gripper[0]) == len(poses_camera_target[0])
     assert len(poses_base_gripper[0]) > 10, "Not enough data points"
+    assert len(poses_base_gripper[0]) == len(poses_camera_target[0]), (
+        f"{len(poses_base_gripper[0])} != {len(poses_camera_target[0])}"
+    )
     # 标定
     if rot_only:
         poses_base_gripper = (
@@ -125,9 +126,9 @@ def _transform_error(RA, tA, RB, tB, RX, tX):
     return rot_err_deg, trans_err
 
 
-def calibrate_b1_b2(
-    cs_ref1_body1: TimePoseSeries,
-    cs_ref2_body2: TimePoseSeries,
+def _calibrate_b1_b2(
+    cs1: TimePoseSeries,
+    cs2: TimePoseSeries,
     *,
     calibr_data: CalibrationData = CalibrationData(),
     is_body_calc: bool = True,
@@ -136,19 +137,16 @@ def calibrate_b1_b2(
     show_t_diff=False,
     rot_only=False,
 ):
-    # 修复时间差距
-    t21_us = match_correlation(cs_ref1_body1, cs_ref2_body2)
-    cs_ref2_body2.t_us += t21_us
     # 插值到相同频率
-    t_new_us = get_time_series([cs_ref1_body1.t_us, cs_ref2_body2.t_us], rate=2)
-    cs1 = pose_interpolate(cs=cs_ref1_body1, t_new_us=t_new_us)
-    cs2 = pose_interpolate(cs=cs_ref2_body2, t_new_us=t_new_us)
+    t_new_us = get_time_series([cs1.t_us, cs2.t_us], rate=2)
+    cs1 = cs1.interpolate(t_new_us)
+    cs2 = cs2.interpolate(t_new_us)
 
     if is_body_calc:
         print("> 计算刚体之间的变换：")
         poses_ref1_body1 = cs1.get_all()
         poses_body2_ref2 = cs2.get_all(inverse=True)
-        pose_body1_body2 = calibrate_T_gc(
+        pose_body1_body2 = _calibrate_T_gc(
             poses_ref1_body1,
             poses_body2_ref2,
             (calibr_data.rot_sensor_gt, calibr_data.tr_sensor_gt),
@@ -166,7 +164,7 @@ def calibrate_b1_b2(
         print("> 计算参考坐标系之间的变换：")
         poses_body1_ref1 = cs1.get_all(inverse=True)
         poses_ref2_body2 = cs2.get_all()
-        pose_ref1_ref2 = calibrate_T_gc(
+        pose_ref1_ref2 = _calibrate_T_gc(
             poses_body1_ref1,
             poses_ref2_body2,
             (calibr_data.rot_ref_sensor_gt, calibr_data.tr_ref_sensor_gt),
@@ -207,32 +205,28 @@ def calibrate_evaluate(pose_gc: Pose, poses_bg, poses_ct, *, rot_only=False):
     return meas_err, max_err
 
 
-def calibrate_sensor_camera(cam_data: ARCoreData):
-    cs_sensor = cam_data.get_time_pose_series(using_cam=False)
-    cs_camera = cam_data.get_time_pose_series(using_cam=True)
-    print("--------------- 计算 Sensor - Camera")
-    cs_sc = calibrate_b1_b2(
-        cs_ref1_body1=cs_sensor,
-        cs_ref2_body2=cs_camera,
-    )
-    return cs_sc
+# def calibrate_sensor_camera(cam_data: ARCoreData):
+#     cs_sensor = cam_data.get_time_pose_series(using_cam=False)
+#     cs_camera = cam_data.get_time_pose_series(using_cam=True)
+#     print("--------------- 计算 Sensor - Camera")
+#     cs_sc = _calibrate_b1_b2(
+#         cs1=cs_sensor,
+#         cs2=cs_camera,
+#     )
+#     return cs_sc
 
 
 def calibrate_pose_series(
     *,
-    imu_series: TimePoseSeries,
-    gt_series: TimePoseSeries,
-    cam_series: TimePoseSeries | None = None,
+    cs_i: TimePoseSeries,
+    cs_g: TimePoseSeries,
+    cs_c: TimePoseSeries | None = None,
 ):
-    if cam_series is not None:
+    if cs_c is not None:
         print("------------- 计算 Sensor - GT ")
-        cd_cg = calibrate_b1_b2(
-            cs_ref1_body1=cam_series, cs_ref2_body2=gt_series, rot_only=False
-        )
+        cd_cg = _calibrate_b1_b2(cs1=cs_c, cs2=cs_g, rot_only=False)
         print("------------- 计算 AHRS - Sensor")
-        cd_ic = calibrate_b1_b2(
-            cs_ref1_body1=imu_series, cs_ref2_body2=cam_series, rot_only=True
-        )
+        cd_ic = _calibrate_b1_b2(cs1=cs_i, cs2=cs_c, rot_only=True)
         cd = cd_cg
         assert cd_ic.rot_ref_sensor_gt is not None
         # 公式 R_ig = R_ic @ R_cg, t_ig = R_ic @ t_cg
@@ -240,38 +234,32 @@ def calibrate_pose_series(
         cd.tr_ref_sensor_gt = cd_ic.rot_ref_sensor_gt @ cd_cg.tr_ref_sensor_gt
         return cd, cd_ic
     else:
-        cd = calibrate_b1_b2(
-            cs_ref1_body1=imu_series,
-            cs_ref2_body2=gt_series,
-            rot_only=True,
-        )
+        cd = _calibrate_b1_b2(cs1=cs_i, cs2=cs_g, rot_only=True)
     return cd, CalibrationData()
 
 
 def calibrate_unit(
     ud: UnitData,
     *,
-    max_time=30,
+    t_len_s=30,
     using_rerun: bool = True,
 ):
     print(f"Calibrating {ud.data_id}")
     imu_data = IMUData(ud.imu_path)
     gt_data = RTABData(ud.gt_path)
 
-    cs_i = imu_data.get_time_pose_series(int(imu_data.rate * max_time))
-    cs_g = gt_data.get_time_pose_series(int(gt_data.rate * max_time))
+    cs_i = imu_data.get_time_pose_series(t_len_s)
+    cs_g = gt_data.get_time_pose_series(t_len_s)
+    t21_us = match_correlation(cs_i, cs_g)
+    cs_g.t_us += t21_us
 
     if ud.using_cam:
         print("Using Camera for calibration")
         cam_data = ARCoreData(ud.cam_path, z_up=ud.is_z_up)
-        cs_c = cam_data.get_time_pose_series(int(cam_data.rate * max_time))
+        cs_c = cam_data.get_time_pose_series(t_len_s)
         notes = "使用相机"
 
-        cd, cd_ic = calibrate_pose_series(
-            imu_series=cs_i,
-            gt_series=cs_g,
-            cam_series=cs_c,
-        )
+        cd, cd_ic = calibrate_pose_series(cs_i=cs_i, cs_g=cs_g, cs_c=cs_c)
         if using_rerun:
             rrec.rerun_init(ud.data_id)
             imu_data.transform_to_world()
@@ -280,8 +268,8 @@ def calibrate_unit(
     else:
         print("Not using Camera for calibration")
         cd, _ = calibrate_pose_series(
-            imu_series=cs_i,
-            gt_series=cs_g,
+            cs_i=cs_i,
+            cs_g=cs_g,
         )
         notes = "未使用相机，为标定位移"
         if using_rerun:
@@ -299,17 +287,3 @@ def calibrate_group(path):
     gp = GroupData(path)
     for unit in gp.units:
         calibrate_unit(unit)
-
-
-def load_calibration_data(
-    *,
-    unit: UnitData,
-    using_rerun: bool = False,
-):
-    # 加载 校准数据
-    try:
-        cd = CalibrationData.from_json(unit.calibr_path)
-    except Exception as _:
-        print("-" * 20, f"标定 {unit.device_name}")
-        cd = calibrate_unit(unit, max_time=40, using_rerun=using_rerun)
-    return cd

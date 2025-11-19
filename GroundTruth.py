@@ -1,5 +1,5 @@
-from base import RTABData, UnitData
 from base.args_parser import DatasetArgsParser
+from base.datatype import RTABData, UnitData
 
 if __name__ == "__main__":
     args = DatasetArgsParser().parse()

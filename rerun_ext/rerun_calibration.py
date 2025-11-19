@@ -2,8 +2,7 @@ import numpy as np
 import rerun as rr
 import rerun.blueprint as rrb
 
-from base import ARCoreData, CalibrationData, IMUData, RTABData
-from base.interpolate import get_time_series, pose_interpolate
+from base.datatype import ARCoreData, CalibrationData, IMUData, RTABData
 from base.space import transform_world
 
 from . import log_coordinate, send_columns_path
@@ -117,14 +116,6 @@ def send_gt_data(gt_data: RTABData, calibr_data: CalibrationData):
         qs=gt_data.node_qs,
         ps=gt_data.node_ps,
     )
-    # gt_data.get_calibr_series()
-    #
-    t_new_us = get_time_series([gt_data.node_t_us])
-    cs = pose_interpolate(
-        cs=gt_data.get_time_pose_series(),
-        t_new_us=t_new_us,
-    )
-    gt_data.node_t_us, gt_data.node_qs, gt_data.node_ps = cs.t_us, cs.qs, cs.ps
 
     times = rr.TimeColumn("timestamp", timestamp=gt_data.node_t_us * 1e-6)
     # rr.log(

@@ -8,17 +8,18 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from base import (
+from base import load_calibration_data
+from base.action import dataset_action
+from base.args_parser import DatasetArgsParser
+from base.datatype import (
     Dataset,
     IMUData,
     RTABData,
     TimePoseSeries,
     UnitData,
 )
-from base.args_parser import DatasetArgsParser
-from base.interpolate import get_time_series, pose_interpolate
+from base.interpolate import get_time_series
 from base.space import transform_local
-from hand_eye import load_calibration_data
 from time_diff import match_correlation
 
 
@@ -98,7 +99,7 @@ def UnitCovert(
 
         # 插值并变换IMU数据
         t_us = get_time_series([gt_data.t_sys_us, imu_data.t_sys_us], rate=rate)
-        cs_g = pose_interpolate(cs=cs_g, t_new_us=t_us)
+        cs_g = cs_g.interpolate(t_us)
         imu_data.interpolate(t_us)
         imu_data.transform_to_world()
 
@@ -141,26 +142,16 @@ if __name__ == "__main__":
         output_path.mkdir(parents=True)
 
     ds = Dataset(dataset_path)
-    # flatten_data = ds.flatten()
     t_len_all_s = 0.0
-    idx = 0
-    res = []
-    for p in ds.persons:
-        for g in p.groups:
-            for u in g.units:
-                print(f"\n{idx}.", u.data_id, ":", u.base_dir)
-                # TODO 临时不启用 Cam 用于标定
-                u.using_cam = False
-                try:
-                    t_len_s = UnitCovert(
-                        u,
-                        target_root=output_path.joinpath(u.data_id),
-                        regen=regen,
-                    )
-                    t_len_all_s += t_len_s
-                    idx += 1
-                except Exception as e:
-                    res.append((u.base_dir, e))
+
+    def action(ud: UnitData):
+        global t_len_all_s
+        t_len_s = UnitCovert(
+            ud, target_root=output_path.joinpath(ud.data_id), regen=regen
+        )
+        t_len_all_s += t_len_s
+
+    res = dataset_action(ds, action)
 
     if len(res) > 0:
         print("Error occurred during conversion:")

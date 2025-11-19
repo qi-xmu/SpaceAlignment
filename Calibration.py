@@ -8,30 +8,22 @@
 import os
 from pathlib import Path
 
-from base import Dataset
+from base.action import dataset_action
 from base.args_parser import DatasetArgsParser
-from base.datatype import UnitData
-from hand_eye import calibrate_group, calibrate_unit
+from base.calibrate import calibrate_group, calibrate_unit
+from base.datatype import Dataset, UnitData
 
 
 def calibrate_dataset(path: Path | str, regen: bool = False):
     path = Path(path)
-    dataset = Dataset(path)
-    res = []
-    idx = 0
-    for person in dataset.persons:
-        for group in person.groups:
-            for unit in group.units:
-                idx += 1
-                print(f"\n{idx} ...")
-                try:
-                    if regen or not unit.calibr_path.exists():
-                        # unit.using_cam = False
-                        calibrate_unit(unit, using_rerun=False)
-                    else:
-                        print(f"跳过已标定的单元：{unit.base_dir}")
-                except Exception as e:
-                    res.append((unit.base_dir, e))
+    ds = Dataset(path)
+
+    def action(ud: UnitData):
+        if regen or not ud.calibr_path.exists():
+            # unit.using_cam = False
+            calibrate_unit(ud, using_rerun=False)
+
+    res = dataset_action(ds, action)
 
     if len(res) > 0:
         print("标定失败：")

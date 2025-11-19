@@ -1,8 +1,9 @@
 from pathlib import Path
 
-from base import ARCoreData, IMUData, RTABData, UnitData
+from base import load_calibration_data
 from base.args_parser import DatasetArgsParser
-from hand_eye import calibrate_b1_b2, load_calibration_data
+from base.calibrate import calibrate_pose_series
+from base.datatype import ARCoreData, IMUData, RTABData, UnitData
 from rerun_ext import rerun_calibration as rrec
 
 
@@ -27,12 +28,12 @@ def view_calibration(path: Path | str):
     cs1 = imu_data.get_time_pose_series(int(imu_data.rate * 20))
     cs2 = gt_data.get_time_pose_series(int(gt_data.rate * 20))
     cs3 = cam_data.get_time_pose_series(int(cam_data.rate * 20))
-    cd_ic = calibrate_b1_b2(cs1, cs3, rot_only=True)
-    cd = calibrate_b1_b2(cs1, cs2, rot_only=True)
+    cd, cd_ic = calibrate_pose_series(cs_i=cs1, cs_g=cs2, cs_c=cs3)
 
     imu_data.transform_to_world()
     rrec.rerun_init("View Trace")
     rrec.send_imu_cam_data(imu_data, cam_data, cd_ic)
+
     rrec.send_gt_data(gt_data, cd)
 
 

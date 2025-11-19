@@ -2,7 +2,45 @@ import numpy as np
 from numpy.typing import NDArray
 from pyquaternion import Quaternion
 
-from base.datatype import Pose
+from .basetype import Pose
+
+
+def rotation_matrix_to_quaternion(R):
+    """将3x3旋转矩阵转换为四元数 (w, x, y, z)"""
+    trace = np.trace(R)
+
+    if trace > 0:
+        s = np.sqrt(trace + 1.0) * 2  # s = 4 * qw
+        qw = 0.25 * s
+        qx = (R[2, 1] - R[1, 2]) / s
+        qy = (R[0, 2] - R[2, 0]) / s
+        qz = (R[1, 0] - R[0, 1]) / s
+    elif R[0, 0] > R[1, 1] and R[0, 0] > R[2, 2]:
+        s = np.sqrt(1.0 + R[0, 0] - R[1, 1] - R[2, 2]) * 2  # s = 4 * qx
+        qw = (R[2, 1] - R[1, 2]) / s
+        qx = 0.25 * s
+        qy = (R[0, 1] + R[1, 0]) / s
+        qz = (R[0, 2] + R[2, 0]) / s
+    elif R[1, 1] > R[2, 2]:
+        s = np.sqrt(1.0 + R[1, 1] - R[0, 0] - R[2, 2]) * 2  # s = 4 * qy
+        qw = (R[0, 2] - R[2, 0]) / s
+        qx = (R[0, 1] + R[1, 0]) / s
+        qy = 0.25 * s
+        qz = (R[1, 2] + R[2, 1]) / s
+    else:
+        s = np.sqrt(1.0 + R[2, 2] - R[0, 0] - R[1, 1]) * 2  # s = 4 * qz
+        qw = (R[1, 0] - R[0, 1]) / s
+        qx = (R[0, 2] + R[2, 0]) / s
+        qy = (R[1, 2] + R[2, 1]) / s
+        qz = 0.25 * s
+
+    if qw < 0:
+        qw = -qw
+        qx = -qx
+        qy = -qy
+        qz = -qz
+
+    return Quaternion([qw, qx, qy, qz])
 
 
 def OrtR(R: NDArray):

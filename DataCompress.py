@@ -16,7 +16,7 @@ import argparse
 import os
 from pathlib import Path
 
-from base import ARCoreData, IMUData, RTABData
+from base.datatype import ARCoreData, IMUData, RTABData
 
 """
 数据读取。

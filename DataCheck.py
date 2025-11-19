@@ -53,7 +53,7 @@ class DataChecker:
         cs1 = self.imu_data.get_time_pose_series()
         cs2 = self.gt_data.get_time_pose_series()
 
-        t21_us = match_correlation(cs1, cs2, show=False)
+        t21_us = match_correlation(cs1, cs2, show=self.is_visual)
         res["time_diff_21_us"] = t21_us
         res["note"] = "检测两个序列的时间偏移"
         return res

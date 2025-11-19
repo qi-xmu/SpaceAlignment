@@ -27,6 +27,9 @@ class DatasetArgsParser:
         self.parser.add_argument(
             "-r", "--regen", help="Regenerate Dataset", action="store_true"
         )
+        self.parser.add_argument(
+            "-v", "--visual", action="store_true", help="Visualize"
+        )
 
     def parse(self):
         self.parser.parse_args()
@@ -37,6 +40,4 @@ class DatasetArgsParser:
             print(f"- {k}: {v}")
             setattr(self, k, v)
 
-        # if self.dataset and self.group and self.unit:
-        #     self.parser.print_usage()
         return self

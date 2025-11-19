@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import matplotlib.pyplot as plt
 import numpy as np
 from pyquaternion import Quaternion
@@ -35,6 +37,7 @@ def match_correlation(
     *,
     time_range=(1, 20),
     resolution=100,
+    save_path: Path | None = None,
     show=False,
 ):
     """使用互相关法匹配Rs1和Rs2"""
@@ -55,16 +58,19 @@ def match_correlation(
     lag = lag_arr[np.argmax(corr)]
     t21_us = lag * (t_new_us[1] - t_new_us[0])
 
-    if show:
-        fig = plt.figure()
-        ax = fig.add_subplot(111)
-        ax.set_title("Best Time Offset: {:.3f}s".format(t21_us * 1e-6))
-        ax.plot(t_new_us - t21_us, seq1, label="Seq1", alpha=0.5)
-        ax.plot(t_new_us, seq2, label="Seq2", alpha=0.5)
-        ax.set_xlabel("Time (s)")
-        ax.set_ylabel("Angular Velocity (rad/s)")
-        ax.legend()
-        ax.grid()
+    fig = plt.figure()
+    ax = fig.add_subplot(111)
+    ax.set_title("Best Time Offset: {:.3f}s".format(t21_us * 1e-6))
+    ax.plot(t_new_us - t21_us, seq1, label="Seq1", alpha=0.5)
+    ax.plot(t_new_us, seq2, label="Seq2", alpha=0.5)
+    ax.set_xlabel("Time (s)")
+    ax.set_ylabel("Angular Velocity (rad/s)")
+    ax.legend()
+    ax.grid()
+    if save_path:
+        fig.savefig(save_path)
+    if not show:
+        plt.close(fig)
 
     return int(t21_us)
 

@@ -1,4 +1,5 @@
 import json
+from copy import copy
 
 import numpy as np
 from matplotlib import pyplot as plt
@@ -6,6 +7,7 @@ from matplotlib import pyplot as plt
 from base.action import dataset_action
 from base.args_parser import DatasetArgsParser
 from base.datatype import ARCoreData, Dataset, GroupData, IMUData, RTABData, UnitData
+from base.interpolate import get_time_series
 from time_diff import match_correlation
 
 
@@ -53,7 +55,9 @@ class DataChecker:
         cs1 = self.imu_data.get_time_pose_series()
         cs2 = self.gt_data.get_time_pose_series()
 
-        t21_us = match_correlation(cs1, cs2, show=self.is_visual)
+        t21_us = match_correlation(
+            cs1, cs2, show=self.is_visual, save_path=self.ud.target("TimeDiff.png")
+        )
         res["time_diff_21_us"] = t21_us
         res["note"] = "检测两个序列的时间偏移"
         return res
@@ -70,7 +74,11 @@ class DataChecker:
         idxs = np.where(ts_diff > max_gap_s)[0].tolist()
         ts_diff = ts_diff[idxs].tolist()
 
-        self.gt_data.draw(
+        t_new_us = get_time_series([self.gt_data.t_sys_us], rate=100)
+        gt_data = copy(self.gt_data)
+        gt_data.interpolate(t_new_us)
+
+        gt_data.draw(
             mark_idxs=(idxs, ts_diff),
             show=False,
             save_path=self.ud.target("Trajectory.png"),
@@ -85,11 +93,7 @@ class DataChecker:
 
 if __name__ == "__main__":
     # 解析命令行参数，获取数据集路径
-    args = DatasetArgsParser()
-    args.parser.add_argument(
-        "-v", "--visual", action="store_true", help="Visualize data"
-    )
-    args.parse()
+    args = DatasetArgsParser().parse()
     unit_path = args.unit
     group_path = args.group
     dataset_path = args.dataset
@@ -98,18 +102,21 @@ if __name__ == "__main__":
     if unit_path:
         ud = UnitData(unit_path)
         DataChecker(ud, is_visual=visual).run_checks()
+        if visual:
+            plt.show()
     elif group_path:
         gd = GroupData(group_path)
         for ud in gd.units:
             DataChecker(ud, is_visual=visual).run_checks()
+            if visual:
+                plt.show()
     elif dataset_path:
         ds = Dataset(dataset_path)
 
         def action(ud):
             DataChecker(ud, is_visual=visual).run_checks()
+            if visual:
+                plt.show()
 
         dataset_action(ds, action)
-
-    if visual:
-        plt.show()
     print("Analysis completed.")

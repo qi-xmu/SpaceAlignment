@@ -73,12 +73,12 @@ def send_imu_cam_data(
     rr.send_columns(
         "/gyroscope",
         indexes=[ts_imu],
-        columns=rr.Scalars.columns(scalars=imu_data.gyro),
+        columns=rr.Scalars.columns(scalars=imu_data.world_gyro),
     )
     rr.send_columns(
         "/accelerometer",
         indexes=[ts_imu],
-        columns=rr.Scalars.columns(scalars=imu_data.acce),
+        columns=rr.Scalars.columns(scalars=imu_data.world_acce),
     )
     rr.log(
         "/world/W_TO_CAM",

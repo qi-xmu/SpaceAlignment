@@ -63,7 +63,7 @@ def interpolate_vector3d(
         t_old_us,
         vec3d,
         axis=0,
-        kind="linear",
+        kind="cubic",
         fill_value="extrapolate",
     )
     vec3d_new = interp(t_new_us)

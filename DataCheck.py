@@ -66,7 +66,7 @@ class DataChecker:
         mean_gap = np.mean(ts_diff)
         max_gap = np.max(ts_diff)
         # 查询 大于 max_gap_s 的 索引的所有下标
-        max_gap_s = self.gt_data.rate * 2 if max_gap_s is None else max_gap_s
+        max_gap_s = (1 / self.gt_data.rate) * 2 if max_gap_s is None else max_gap_s
         idxs = np.where(ts_diff > max_gap_s)[0].tolist()
         ts_diff = ts_diff[idxs].tolist()
 

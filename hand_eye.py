@@ -274,6 +274,7 @@ def calibrate_unit(
         )
         if using_rerun:
             rrec.rerun_init(ud.data_id)
+            imu_data.transform_to_world()
             rrec.send_imu_cam_data(imu_data, cam_data, cd_ic)
             rrec.send_gt_data(gt_data, cd)
     else:

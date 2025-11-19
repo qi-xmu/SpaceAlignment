@@ -30,7 +30,7 @@ def view_calibration(path: Path | str):
     cd_ic = calibrate_b1_b2(cs1, cs3, rot_only=True)
     cd = calibrate_b1_b2(cs1, cs2, rot_only=True)
 
-    imu_data.transform_to_world(qs=imu_data.ahrs_qs)
+    imu_data.transform_to_world()
     rrec.rerun_init("View Trace")
     rrec.send_imu_cam_data(imu_data, cam_data, cd_ic)
     rrec.send_gt_data(gt_data, cd)

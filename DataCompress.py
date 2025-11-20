@@ -16,7 +16,7 @@ import argparse
 import os
 from pathlib import Path
 
-from base.action import dataset_action
+from base.action import dataset_action, dataset_action_pa
 from base.datatype import ARCoreData, IMUData, NavioDataset, RTABData, UnitData
 
 """
@@ -47,7 +47,7 @@ class Target:
         unit_path = (
             self.target_path.joinpath(self.person)
             .joinpath(group_name)
-            .joinpath(f"{data_id}_{device_name}")
+            .joinpath(data_id)
         )
         imu_path = unit_path.joinpath("imu.csv")
         cam_path = unit_path.joinpath("cam.csv")
@@ -58,14 +58,31 @@ class Target:
 class CompressUnitData(UnitData):
     def __init__(self, base_dir: str | Path, device_name: str):
         UnitData.__init__(self, base_dir)
+
         self.device_name = device_name  # type: ignore
+        self.data_id = f"{self.data_id}_{self.device_name}"
+
+    @classmethod
+    def from_unit(cls, unit: UnitData):
+        self = cls(unit.base_dir, unit.device_name)
+        self.data_id = unit.data_id
+        return self
 
     @staticmethod
     def copy_file(src: Path, dst: Path):
         """Copy file from src to dst."""
+        print(f"Copying {src} to {dst}")
         dst.write_bytes(src.read_bytes())
 
-    def compress(self, target: Target, *, regen: bool = False, using_cam: bool = False):
+    def compress(
+        self,
+        target: Target,
+        *,
+        regen: bool = False,
+        using_cam: bool = True,
+        is_z_up: bool = False,
+        is_load_opt: bool = False,
+    ):
         if self.err_msg:
             return
         t_base_us = 0
@@ -74,7 +91,7 @@ class CompressUnitData(UnitData):
         )
 
         if not new_imu_path.exists() or regen:
-            gt_data = RTABData(self.gt_path, is_load_opt=False)
+            gt_data = RTABData(self.gt_path, is_load_opt=is_load_opt)
             unit_path.mkdir(parents=True, exist_ok=True)
             gt_data.save_csv(new_gt_path)
         else:
@@ -85,9 +102,17 @@ class CompressUnitData(UnitData):
             imu_data = IMUData(self.imu_path, t_base_us=t_base_us)
             imu_data.save_csv(new_imu_path)
 
-        if using_cam and (not new_cam_path.exists() or regen):
-            cam_data = ARCoreData(self.cam_path, z_up=True, t_base_us=t_base_us)
+        if self.using_cam and using_cam and (not new_cam_path.exists() or regen):
+            cam_data = ARCoreData(self.cam_path, z_up=is_z_up, t_base_us=t_base_us)
             cam_data.save_csv(new_cam_path)
+
+        # 复制标定文件
+        assert self.calibr_path.exists(), (
+            f"Calibration file not found: {self.calibr_path}"
+        )
+        new_calibr_path = unit_path / "Calibration.json"
+        if not new_calibr_path.exists():
+            self.copy_file(self.calibr_path, new_calibr_path)
 
         return unit_path
 
@@ -161,17 +186,14 @@ if __name__ == "__main__":
     DatasetDicts = {"ruijie": RuijieDataset, "navio": NavioDataset}
     ds = DatasetDicts[args.type](dataset_path)
     tg = Target(output_path)
-    res = []
 
-    def action(ud: CompressUnitData):
+    def action(ud: UnitData):
+        ud = CompressUnitData.from_unit(ud)
         ud.compress(tg, regen=regen)
 
-    dataset_action(ds, action)
+    res = dataset_action_pa(ds, action)
 
     if len(res):
         print("错误数据：")
         for path, err in res:
-            print(path, err)
-            move_dir(path, output_path.parent / "Error")
-            with open(output_path / "Error" / "error.log", "a") as f:
-                print(f"{path} {err}", file=f)
+            print(f"{path}\n{err}")

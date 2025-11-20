@@ -439,7 +439,7 @@ class IMUData:
 
         self.extend = bool(raw_data.shape[1] > 11)
         if self.extend:
-            self.t_sys_us = raw_data[:, 11].astype(np.int64)  # 1970 us
+            self.t_sys_us = raw_data[:, 11]  # 1970 us
             self.t_sys_us = self.t_sys_us[0] + self.t_us_f0
         else:
             print("Warning: No system timestamp data available")

@@ -138,7 +138,7 @@ class CompressUnitData:
 
 class DeviceData:
     base_dir: Path
-    devices_name: str
+    device_name: str
     units: list[CompressUnitData]
     all_units: list[CompressUnitData]
     fail_units: list[CompressUnitData]
@@ -155,14 +155,23 @@ class DeviceData:
         self.fail_units = [it for it in self.all_units if it.err_msg]
         self.units = [it for it in self.all_units if not it.err_msg]
 
+    def flatten(self):
+        return [unit for unit in self.units]
 
-class RuijieData:
+
+class RuijieDataset:
     base_dir: Path
     devices: list[DeviceData]
 
     def __init__(self, base_dir: str | Path) -> None:
         self.base_dir = Path(base_dir)
         self.devices = [DeviceData(it) for it in self.base_dir.iterdir() if it.is_dir()]
+
+    def flatten(self):
+        units = []
+        for device in self.devices:
+            units.extend(device.flatten())
+        return units
 
 
 def move_dir(src: Path, dst: Path) -> None:
@@ -177,6 +186,7 @@ if __name__ == "__main__":
     parser.add_argument("-d", "--dataset", help="Path to the dataset file")
     parser.add_argument("-o", "--output", help="Path to the output file")
     parser.add_argument("-r", "--regen", action="store_true", help="Regenerate data")
+    parser.add_argument("-t", "--type", choices=["ruijie", "navio"], default="navio")
     args = parser.parse_args()
     dataset_path = Path(args.dataset)
     output_path = Path(args.output)
@@ -185,7 +195,7 @@ if __name__ == "__main__":
     if not output_path.exists():
         output_path.mkdir(parents=True)
 
-    rd = RuijieData(dataset_path)
+    rd = RuijieDataset(dataset_path)
     tg = Target(output_path)
     res = []
     for i, device in enumerate(rd.devices):

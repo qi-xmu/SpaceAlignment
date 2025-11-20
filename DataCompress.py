@@ -58,13 +58,14 @@ class Target:
 class CompressUnitData(UnitData):
     def __init__(self, base_dir: str | Path, device_name: str):
         UnitData.__init__(self, base_dir)
+        self.device_name = device_name  # type: ignore
 
     @staticmethod
     def copy_file(src: Path, dst: Path):
         """Copy file from src to dst."""
         dst.write_bytes(src.read_bytes())
 
-    def compress(self, target: Target, *, regen: bool = False):
+    def compress(self, target: Target, *, regen: bool = False, using_cam: bool = False):
         if self.err_msg:
             return
         t_base_us = 0
@@ -84,9 +85,9 @@ class CompressUnitData(UnitData):
             imu_data = IMUData(self.imu_path, t_base_us=t_base_us)
             imu_data.save_csv(new_imu_path)
 
-        # if not new_cam_path.exists() or regen:
-        cam_data = ARCoreData(self.cam_path, z_up=True, t_base_us=t_base_us)
-        cam_data.save_csv(new_cam_path)
+        if using_cam and (not new_cam_path.exists() or regen):
+            cam_data = ARCoreData(self.cam_path, z_up=True, t_base_us=t_base_us)
+            cam_data.save_csv(new_cam_path)
 
         return unit_path
 

@@ -6,7 +6,21 @@ from matplotlib import pyplot as plt
 
 from base.action import dataset_action
 from base.args_parser import DatasetArgsParser
-from base.datatype import ARCoreData, Dataset, GroupData, IMUData, RTABData, UnitData
+from base.datatype import (
+    ARCoreData,
+    NavioDataset,
+    GroupData,
+    IMUData,
+    RTABData,
+    UnitData,
+)
+    ARCoreData,
+    GroupData,
+    IMUData,
+    NavioDataset,
+    RTABData,
+    UnitData,
+)
 from base.interpolate import get_time_series
 from time_diff import match_correlation
 
@@ -111,7 +125,7 @@ if __name__ == "__main__":
             if visual:
                 plt.show()
     elif dataset_path:
-        ds = Dataset(dataset_path)
+        ds = NavioDataset(dataset_path)
 
         def action(ud):
             DataChecker(ud, is_visual=visual).run_checks()

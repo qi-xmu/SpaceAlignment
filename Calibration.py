@@ -11,12 +11,12 @@ from pathlib import Path
 from base.action import dataset_action
 from base.args_parser import DatasetArgsParser
 from base.calibrate import calibrate_group, calibrate_unit
-from base.datatype import Dataset, UnitData
+from base.datatype import NavioDataset, UnitData
 
 
 def calibrate_dataset(path: Path | str, regen: bool = False):
     path = Path(path)
-    ds = Dataset(path)
+    ds = NavioDataset(path)
 
     def action(ud: UnitData):
         if regen or not ud.calibr_path.exists():

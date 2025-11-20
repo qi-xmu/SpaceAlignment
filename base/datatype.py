@@ -9,6 +9,7 @@ import numpy as np
 import pandas as pd
 from numpy.typing import NDArray
 from pyquaternion import Quaternion
+from typing_extensions import override
 
 from .basetype import DeviceType, Pose, Poses, SceneType, Time  # noqa
 from .interpolate import interpolate_vector3d, slerp_quaternion
@@ -19,33 +20,36 @@ class UnitData:
     _CALIBR_FILE = "Calibration_{}.json"
 
     data_id: str
-    device_name: DeviceType
     imu_path: Path
     cam_path: Path  # ARCore
     gt_path: Path
+    # extend proterty
+    device_name: DeviceType
     calibr_path: Path
     is_z_up: bool
     is_calibr_data: bool
-    err_msg: str | None = None
     using_cam: bool
+
+    err_msg: str | None = None
 
     def __init__(self, base_dir: Path | str):
         self.base_dir = Path(base_dir)
         self.data_id = self.base_dir.name
-        # device_name
+        # 设备名称
         spl = self.data_id.split("_")
         device_name = spl[2] if len(spl) > 2 else "Unknown"
         self.device_name = device_name  # type: ignore
 
         self.cam_path = self.base_dir.joinpath("cam.csv")
         self.imu_path = self.base_dir.joinpath("imu.csv")
-        self.gt_path = self._load_gt_path()  # self.gt_path
+        self.gt_path = self._load_gt_path()
 
         # 获取 组 名称
         self.group_path = self.base_dir.parent
         self.is_calibr_data = "/Calibration" in str(self.base_dir)
         if self.is_calibr_data:
             self.group_path = self.group_path.parent
+
         # 标定文件
         calibr_file = self.group_path.joinpath(self._CALIBR_FILE.format(device_name))
         if not calibr_file.exists():
@@ -109,6 +113,9 @@ class GroupData:
                 if item.name.startswith(ymd):
                     self.units.append(UnitData(item))
 
+    def flatten(self) -> list[UnitData]:
+        return self.units
+
 
 @dataclass
 class PersonData:
@@ -122,39 +129,37 @@ class PersonData:
             if item.is_dir():
                 self.groups.append(GroupData(item))
 
-
-@dataclass
-class FlattenUnitData(UnitData):
-    person_id: str | None
-    group_id: str
-    scene_type: SceneType
-
-    def __init__(self, person: PersonData | None, group: GroupData, unit: UnitData):
-        self.person_id = person.person_id if person is not None else None
-        self.group_id = group.group_id
-        self.scene_type = group.scene_type
-        super().__init__(unit.base_dir)
+    def flatten(self) -> list[UnitData]:
+        units = []
+        for group in self.groups:
+            units.extend(group.flatten())
+        return units
 
 
 class Dataset:
+    def flatten(self) -> list[UnitData]:
+        raise NotImplementedError
+
+
+class NavioDataset(Dataset):
     root_dir: Path
     persons: list[PersonData]
 
     def __init__(self, root_dir: str | Path, person_ids: list[str] | None = None):
         self.root_dir = Path(root_dir)
-        person_ids = person_ids if person_ids else self._load_dir_list()
+        person_ids = (
+            person_ids
+            if person_ids
+            else [it.name for it in self.root_dir.iterdir() if it.is_dir()]
+        )
         self.persons = [PersonData(self.root_dir.joinpath(pid)) for pid in person_ids]
 
-    def _load_dir_list(self) -> list[str]:
-        return [it.name for it in self.root_dir.iterdir() if it.is_dir()]
-
-    def flatten(self) -> list[FlattenUnitData]:
-        res = []
+    @override
+    def flatten(self) -> list[UnitData]:
+        units = []
         for person in self.persons:
-            for group in person.groups:
-                for unit in group.units:
-                    res.append(FlattenUnitData(person, group, unit))
-        return res
+            units.extend(person.flatten())
+        return units
 
 
 class TimePoseSeries:

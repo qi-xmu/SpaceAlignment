@@ -9,14 +9,13 @@ def dataset_action(
 ) -> List[Tuple[Path, AnyStr]]:
     idx = 0
     results = []
-    for p in ds.persons:
-        for g in p.groups:
-            for u in g.units:
-                try:
-                    idx += 1
-                    print(f"\n{idx} {u.base_dir} ...")
-                    action(u, *args, **kwargs)
-                except Exception as e:
-                    print(e)
-                    results.append((u.base_dir, str(e)))
+    units = ds.flatten()
+    for u in units:
+        try:
+            idx += 1
+            print(f"\n{idx} {u.base_dir} ...")
+            action(u, *args, **kwargs)
+        except Exception as e:
+            print(e)
+            results.append((u.base_dir, str(e)))
     return results

@@ -16,7 +16,8 @@ import argparse
 import os
 from pathlib import Path
 
-from base.datatype import ARCoreData, IMUData, RTABData
+from base.action import dataset_action
+from base.datatype import ARCoreData, IMUData, NavioDataset, RTABData, UnitData
 
 """
 数据读取。
@@ -54,48 +55,9 @@ class Target:
         return (unit_path, imu_path, cam_path, gt_path)
 
 
-class CompressUnitData:
-    data_id: str
-    device_name: str
-    imu_path: Path
-    cam_path: Path
-    gt_path: Path
-    calibr_path: Path
-    err_msg = str | None
-
+class CompressUnitData(UnitData):
     def __init__(self, base_dir: str | Path, device_name: str):
-        self.base_dir = Path(base_dir)
-        self.data_id = self.base_dir.name
-        self.device_name = device_name
-        self.err_msg = None
-
-        try:
-            self.cam_path = self.base_dir.joinpath("cam.csv")
-            self.imu_path = self.base_dir.joinpath("imu.csv")
-            self.gt_path = self.base_dir.joinpath("rtab.csv")
-            gt_path = self._load_gt_path()
-            assert gt_path is not None, f"rtab.csv/*.db not found in {self.base_dir}"
-            assert self.cam_path.exists(), f"cam.csv not found in {self.base_dir}"
-            assert self.imu_path.exists(), f"imu.csv not found in {self.base_dir}"
-            self.gt_path = gt_path
-        except Exception as e:
-            self.err_msg = e.__str__()
-            return
-
-    def _load_gt_path(self):
-        # 优先使用 rtab.csv 文件
-        gt_path = self.gt_path
-        if gt_path.exists():
-            return
-
-        # 检查此文件夹下文件，选中第一个后缀为 db 的文件
-        for file in self.base_dir.iterdir():
-            if file.suffix == ".db":
-                gt_path = file
-                break
-        else:
-            raise FileNotFoundError(f"No .db file found in {self.base_dir}")
-        return gt_path
+        UnitData.__init__(self, base_dir)
 
     @staticmethod
     def copy_file(src: Path, dst: Path):
@@ -186,7 +148,7 @@ if __name__ == "__main__":
     parser.add_argument("-d", "--dataset", help="Path to the dataset file")
     parser.add_argument("-o", "--output", help="Path to the output file")
     parser.add_argument("-r", "--regen", action="store_true", help="Regenerate data")
-    parser.add_argument("-t", "--type", choices=["ruijie", "navio"], default="navio")
+    parser.add_argument("-t", "--type", choices=["navio", "ruijie"], default="navio")
     args = parser.parse_args()
     dataset_path = Path(args.dataset)
     output_path = Path(args.output)
@@ -195,18 +157,15 @@ if __name__ == "__main__":
     if not output_path.exists():
         output_path.mkdir(parents=True)
 
-    rd = RuijieDataset(dataset_path)
+    DatasetDicts = {"ruijie": RuijieDataset, "navio": NavioDataset}
+    ds = DatasetDicts[args.type](dataset_path)
     tg = Target(output_path)
     res = []
-    for i, device in enumerate(rd.devices):
-        for j, unit in enumerate(device.units):
-            print(f"\n{i}-{j} {unit.base_dir} ...")
-            err = unit.compress_catch(tg, regen=regen)
-            if err:
-                res.append((unit.base_dir, err))
-                print(f"错误信息：{err}")
-            else:
-                print("成功")
+
+    def action(ud: CompressUnitData):
+        ud.compress(tg, regen=regen)
+
+    dataset_action(ds, action)
 
     if len(res):
         print("错误数据：")

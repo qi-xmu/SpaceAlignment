@@ -12,8 +12,8 @@ from base import load_calibration_data
 from base.action import dataset_action
 from base.args_parser import DatasetArgsParser
 from base.datatype import (
-    Dataset,
     IMUData,
+    NavioDataset,
     RTABData,
     TimePoseSeries,
     UnitData,
@@ -141,7 +141,7 @@ if __name__ == "__main__":
     if not output_path.exists():
         output_path.mkdir(parents=True)
 
-    ds = Dataset(dataset_path)
+    ds = NavioDataset(dataset_path)
     t_len_all_s = 0.0
 
     def action(ud: UnitData):

@@ -205,8 +205,8 @@ class TimePoseSeries:
 
 @dataclass
 class CalibrationData:
-    tf_sg_local: Transform
-    tf_sg_global: Transform
+    tf_local: Transform
+    tf_global: Transform
     notes: str = ""
 
     @classmethod
@@ -231,10 +231,10 @@ class CalibrationData:
             return cls(tf_sg_local, tf_sg_global)
 
     def to_json(self, json_path: Path, notes_ext: str = ""):
-        rot_sensor_gt = self.tf_sg_global.rot.as_matrix().tolist()
-        tr_sensor_gt = self.tf_sg_global.tran.tolist()
-        rot_ref_sensor_gt = self.tf_sg_global.rot.as_matrix().tolist()
-        tr_ref_sensor_gt = self.tf_sg_global.tran.tolist()
+        rot_sensor_gt = self.tf_global.rot.as_matrix().tolist()
+        tr_sensor_gt = self.tf_global.tran.tolist()
+        rot_ref_sensor_gt = self.tf_global.rot.as_matrix().tolist()
+        tr_ref_sensor_gt = self.tf_global.tran.tolist()
 
         with open(json_path, "w") as f:
             json.dump(
@@ -413,6 +413,12 @@ class ARCoreData:
         # #timestamp [us],p_RS_R_x [m],p_RS_R_y [m],p_RS_R_z [m],q_RS_w [],q_RS_x [],q_RS_y [],q_RS_z []
         self.raw_data = pd.read_csv(self.file_path).to_numpy()
 
+        # Remove duplicate timestamps and ensure strictly increasing
+        if len(self.raw_data) > 1:
+            # Get unique timestamps while preserving order
+            _, unique_indices = np.unique(self.raw_data[:, 0], return_index=True)
+            self.raw_data = self.raw_data[unique_indices]
+
         self.sensor_t_us = self.raw_data[:, 0]
         self.raw_sensor_ps = self.raw_data[:, 1:4]
         self.raw_sensor_qs = self.raw_data[:, 4:8]  # wxyz
@@ -448,6 +454,10 @@ class ARCoreData:
         max_idx = len(self.t_sys_us)
         if t_len_s is not None:
             max_idx = min(max_idx, int(t_len_s * 1e6))
+
+        assert len(np.unique(self.t_sys_us)) == len(self.t_sys_us), (
+            "Time stamps are not unique"
+        )
         return TimePoseSeries(
             t_us=self.t_sys_us[:max_idx],
             rots=self.sensor_rots[:max_idx]
@@ -643,16 +653,12 @@ class RTABData:
 
             self.node_ids.append(node_id)
             node_t_us.append(int(stamp * 1e6))  # convert to us
-            node_rots.append(pose.rot)
+            node_rots.append(pose.rot.as_quat())
             node_ps.append(pose.tran)
 
         self.node_t_us = np.array(node_t_us)
-        self.node_rots = Rotation.from_matrix(node_rots)
+        self.node_rots = Rotation.from_quat(node_rots)
         self.node_ps = np.array(node_ps)
-
-        print(
-            f"Loaded {len(self.node_ids)} nodes, {len(self.opt_ids)} optimized witch Freq: {self.rate:.2f} from the database. "
-        )
 
     def get_time_pose_series(
         self, t_len_s: int | None = None, *, using_opt: bool = False

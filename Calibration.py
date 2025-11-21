@@ -5,7 +5,6 @@
 一般来说，数据量越多，标定结果越准确。
 """
 
-import os
 from pathlib import Path
 
 from base.action import dataset_action
@@ -29,11 +28,6 @@ def calibrate_dataset(path: Path | str, regen: bool = False):
         print("标定失败：")
         for base_dir, error in res:
             print(f"{base_dir}: {error}")
-            target_dir = path.parent / "Error"
-            target_dir.mkdir(parents=True, exist_ok=True)
-            cmd = f"mv {base_dir} {target_dir} && echo '{error}' > {target_dir / base_dir.name / 'error.log'}"
-            print(cmd)
-            os.system(cmd)
 
 
 def main():

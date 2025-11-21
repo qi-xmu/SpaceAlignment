@@ -80,8 +80,8 @@ def send_imu_cam_data(
     rr.log(
         "/world/W_TO_CAM",
         rr.Transform3D(
-            mat3x3=cd_ic.tf_sg_global.rot.as_matrix(),
-            translation=cd_ic.tf_sg_global.tran,
+            mat3x3=cd_ic.tf_global.rot.as_matrix(),
+            translation=cd_ic.tf_global.tran,
         ),
         static=True,
     )
@@ -109,17 +109,15 @@ def send_imu_cam_data(
 
 
 def send_gt_data(gt_data: RTABData, calibr_data: CalibrationData):
-    gs = gt_data.get_time_pose_series()
-
     times = rr.TimeColumn("timestamp", timestamp=gt_data.node_t_us * 1e-6)
-    # rr.log(
-    #     "/world/W_TO_GT",
-    #     rr.Transform3D(
-    #         mat3x3=calibr_data.rot_ref_sensor_gt,
-    #         translation=calibr_data.tr_ref_sensor_gt,
-    #     ),
-    #     static=True,
-    # )
+    rr.log(
+        "/world/W_TO_GT",
+        rr.Transform3D(
+            mat3x3=calibr_data.tf_global.rot.as_matrix(),
+            translation=calibr_data.tf_global.tran,
+        ),
+        static=True,
+    )
 
     log_coordinate(
         "/world/W_TO_GT/groundtruth",
@@ -150,7 +148,7 @@ def send_gt_data(gt_data: RTABData, calibr_data: CalibrationData):
         show_labels=True,
     )
 
-    tf_gs_local = calibr_data.tf_sg_local.inverse()
+    tf_gs_local = calibr_data.tf_local.inverse()
     rr.log(
         "/world/W_TO_GT/groundtruth/sensor",
         rr.Transform3D(

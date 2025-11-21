@@ -83,7 +83,7 @@ def UnitCovert(
     if not target_path.npy_file.exists() or regen:
         # 真值空间变换
         cs_g = gt_data.get_time_pose_series()
-        cs_g.transform_local(cd.tf_sg_local.inverse())
+        cs_g.transform_local(cd.tf_local.inverse())
 
         # 计算时间偏差
         cs_i = imu_data.get_time_pose_series()

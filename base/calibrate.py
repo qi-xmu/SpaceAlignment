@@ -1,3 +1,5 @@
+from copy import copy
+
 import cv2
 import numpy as np
 import rerun as rr
@@ -133,37 +135,31 @@ def _calibrate_b1_b2(
 
     if is_body_calc:
         print("> 计算刚体之间的变换：")
-        poses_ref1_body1 = cs1.get_all()
-        poses_body2_ref2 = cs2.get_all(inverse=True)
-        pose_body1_body2 = _calibrate_T_gc(
-            poses_ref1_body1, poses_body2_ref2, rot_only=rot_only
-        )
+        poses_rb1 = cs1.get_all()
+        poses_br2 = cs2.get_all(inverse=True)
+        pose_b12 = _calibrate_T_gc(poses_rb1, poses_br2, rot_only=rot_only)
         err_b1_b2 = calibrate_evaluate(
-            pose_body1_body2, poses_ref1_body1, poses_body2_ref2, rot_only=rot_only
+            pose_b12, poses_rb1, poses_br2, rot_only=rot_only
         )
-        poses_ref1_body1, poses_body2_ref2 = None, None
     else:
-        pose_body1_body2 = Transform.identity()
+        pose_b12 = Transform.identity()
         err_b1_b2 = None
 
     if is_ref_calc:
         print("> 计算参考坐标系之间的变换：")
-        poses_body1_ref1 = cs1.get_all(inverse=True)
-        poses_ref2_body2 = cs2.get_all()
-        pose_ref1_ref2 = _calibrate_T_gc(
-            poses_body1_ref1, poses_ref2_body2, rot_only=rot_only
-        )
+        poses_br1 = cs1.get_all(inverse=True)
+        poses_rb1 = cs2.get_all()
+        pose_r12 = _calibrate_T_gc(poses_br1, poses_rb1, rot_only=rot_only)
         err_r1_r2 = calibrate_evaluate(
-            pose_ref1_ref2, poses_body1_ref1, poses_ref2_body2, rot_only=rot_only
+            pose_r12, poses_br1, poses_rb1, rot_only=rot_only
         )
-        poses_body1_ref1, poses_ref2_body2 = None, None
     else:
-        pose_ref1_ref2 = Transform.identity()
+        pose_r12 = Transform.identity()
         err_r1_r2 = None
 
     cd = CalibrationData(
-        pose_body1_body2,
-        pose_ref1_ref2,
+        pose_b12,
+        pose_r12,
         notes=f"err_sg_local = {err_b1_b2} err_sg_global = {err_r1_r2}",
     )
     return cd
@@ -202,10 +198,13 @@ def calibrate_pose_series(
         cd_cg = _calibrate_b1_b2(cs1=cs_c, cs2=cs_g, rot_only=False)
         print("------------- 计算 AHRS - Sensor")
         cd_ic = _calibrate_b1_b2(cs1=cs_i, cs2=cs_c, rot_only=True)
-        cd = cd_cg
-        assert cd_ic.tf_sg_global is not None
-        cd.tf_sg_global = cd_ic.tf_sg_global * cd_cg.tf_sg_global
-        return cd, cd_ic
+        cd_sg = copy(cd_cg)
+        assert cd_ic.tf_global is not None
+        # cd_sg.tf_global = cd_ic.tf_global * cd_cg.tf_global
+        cd_sg.tf_global.rot = cd_ic.tf_global.rot * cd_cg.tf_global.rot
+        cd_sg.tf_global.tran = cd_ic.tf_global.tran * cd_cg.tf_global.tran
+
+        return cd_sg, cd_ic
     else:
         cd = _calibrate_b1_b2(cs1=cs_i, cs2=cs_g, rot_only=True)
     return cd, CalibrationData.identity()
@@ -241,10 +240,7 @@ def calibrate_unit(
             rrec.send_gt_data(gt_data, cd)
     else:
         print("Not using Camera for calibration")
-        cd, _ = calibrate_pose_series(
-            cs_i=cs_i,
-            cs_g=cs_g,
-        )
+        cd, _ = calibrate_pose_series(cs_i=cs_i, cs_g=cs_g)
         notes = "未使用相机，为标定位移"
         if using_rerun:
             rrec.rerun_init(ud.data_id)

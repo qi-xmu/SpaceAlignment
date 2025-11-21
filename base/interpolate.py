@@ -1,54 +1,20 @@
 import numpy as np
-from pyquaternion import Quaternion
+from numpy.typing import NDArray
 from scipy.interpolate import interp1d
+from scipy.spatial.transform import Rotation, Slerp
 
 from .basetype import Time
 
 
-def slerp_quaternion(
-    *,
-    qs: list[Quaternion],
-    t_old_us: Time,
-    t_new_us: Time,
-) -> list[Quaternion]:
-    t_old_us = np.array(t_old_us)
-    t_new_us = np.array(t_new_us)
-
-    assert t_new_us[0] >= t_old_us[0] and t_new_us[-1] <= t_old_us[-1], (
-        f"Error, t: [{t_new_us[0] - t_old_us[0]} - {t_new_us[-1] - t_old_us[-1]}]"
-    )
-
-    n_old = len(t_old_us)
-    n_new = len(t_new_us)
-    qs_new = []
-    ptr = 0
-    for i in range(n_new):
-        while t_new_us[i] > t_old_us[ptr] and ptr + 1 < n_old:
-            ptr += 1
-        # 寻找插值的左侧
-        pre = max(ptr - 1, 0)
-        while t_old_us[pre] > t_new_us[i] and pre > 0:
-            pre = pre - 1
-
-        if t_new_us[i] == t_old_us[ptr]:
-            qs_new.append(qs[ptr])
-        else:
-            assert t_old_us[ptr] != t_old_us[pre], f"Duplicate time {t_old_us[ptr]}"
-            amount = (t_new_us[i] - t_old_us[pre]) / (t_old_us[ptr] - t_old_us[pre])
-            q = Quaternion.slerp(
-                qs[pre],
-                qs[ptr],
-                amount,
-            )
-            qs_new.append(q)
-    return qs_new
+def slerp_rotation(rots: Rotation, t_old_us: NDArray, t_new_us: NDArray) -> Rotation:
+    assert len(rots) == len(t_old_us)
+    slerp = Slerp(t_old_us, rots)
+    rots_new = slerp(t_new_us)
+    return rots_new
 
 
 def interpolate_vector3d(
-    *,
-    vec3d: list[np.ndarray] | np.ndarray,
-    t_old_us: Time,
-    t_new_us: Time,
+    vec3d: list[np.ndarray] | np.ndarray, t_old_us: Time, t_new_us: Time
 ) -> np.ndarray:
     assert len(vec3d) == len(t_old_us)
     vec3d = np.array(vec3d)

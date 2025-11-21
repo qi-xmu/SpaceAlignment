@@ -9,17 +9,15 @@ import numpy as np
 import pandas as pd
 
 from base import load_calibration_data
-from base.action import dataset_action, dataset_action_pa
+from base.action import dataset_action, dataset_action_pa  # noqa
 from base.args_parser import DatasetArgsParser
 from base.datatype import (
     IMUData,
     NavioDataset,
     RTABData,
-    TimePoseSeries,
     UnitData,
 )
 from base.interpolate import get_time_series
-from base.space import transform_local
 from time_diff import match_correlation
 
 
@@ -73,24 +71,19 @@ def UnitCovert(
     cd = load_calibration_data(unit=unit)
 
     # 使用csv存储原始数据
-    imu_samples = pd.DataFrame()
-    imu_samples[TLIO.t] = imu_data.t_sys_us
-    imu_samples[TLIO.c] = np.zeros_like(imu_data.t_us)
-    imu_samples[TLIO.w] = imu_data.gyro
-    imu_samples[TLIO.a] = imu_data.acce
-    imu_samples.to_csv(target_path.csv_file, index=False)
+    if not target_path.csv_file.exists():
+        imu_samples = pd.DataFrame()
+        imu_samples[TLIO.t] = imu_data.t_sys_us
+        imu_samples[TLIO.c] = np.zeros_like(imu_data.t_us)
+        imu_samples[TLIO.w] = imu_data.gyro
+        imu_samples[TLIO.a] = imu_data.acce
+        imu_samples.to_csv(target_path.csv_file, index=False)
 
     # TODO  计算 IMU 旋转到全局坐标系下的数值，以及真值对齐到 IMU 的旋转矩阵 T_WI.
     if not target_path.npy_file.exists() or regen:
         # 真值空间变换
-        # Groundtruth Body -> Sensor Body
-        qs, ps = transform_local(
-            tf_local=cd.tf_gs_local,
-            qs=gt_data.node_qs,
-            ps=gt_data.node_ps,
-        )
-        cs_g = TimePoseSeries(t_us=gt_data.t_sys_us, qs=qs, ps=ps)
-        qs, ps = None, None
+        cs_g = gt_data.get_time_pose_series()
+        cs_g.transform_local(cd.tf_sg_local.inverse())
 
         # 计算时间偏差
         cs_i = imu_data.get_time_pose_series()
@@ -104,8 +97,8 @@ def UnitCovert(
         imu_data.transform_to_world()
 
         # 数据存储 quaternion形式 xyzw
-        qs = np.array([[q.x, q.y, q.z, q.w] for q in cs_g.qs])
-        ps = cs_g.ps
+        qs = cs_g.rots.as_quat()
+        ps = cs_g.trans
 
         _dt_s = np.diff(t_us, axis=0).reshape(-1, 1) * 1e-6
         vs = np.diff(ps, axis=0) / _dt_s
@@ -151,7 +144,7 @@ if __name__ == "__main__":
         )
         t_len_all_s += t_len_s
 
-    res = dataset_action_pa(ds, action)
+    res = dataset_action(ds, action)
 
     if len(res) > 0:
         print("Error occurred during conversion:")

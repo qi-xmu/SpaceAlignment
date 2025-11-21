@@ -8,12 +8,11 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 from numpy.typing import NDArray
-from pyquaternion import Quaternion
+from scipy.spatial.transform import Rotation
 from typing_extensions import override
 
-from .basetype import DeviceType, Pose, Poses, SceneType, Time  # noqa
-from .interpolate import interpolate_vector3d, slerp_quaternion
-from .space import OrtR
+from .basetype import DeviceType, PoseSeries, SceneType, Time, Transform  # noqa
+from .interpolate import interpolate_vector3d, slerp_rotation
 
 
 class UnitData:
@@ -169,203 +168,73 @@ class TimePoseSeries:
     """
 
     t_us: Time
-    qs: list[Quaternion]
-    ps: NDArray[np.float64]
+    rots: Rotation
+    trans: NDArray
 
-    def __init__(self, t_us: Time, qs: list[Quaternion], ps: NDArray[np.float64]):
+    def __init__(self, t_us: Time, rots: Rotation, ps: NDArray):
         self.t_us = t_us
-        self.qs = qs
-        self.ps = ps
-        self.rate = len(self) / (self.t_us[-1] - self.t_us[0]) * 1e6
+        self.rots = rots
+        self.trans = ps
+        self.rate = float(np.mean(1e6 / np.diff(t_us)))
 
     def __len__(self) -> int:
         return len(self.t_us)
 
-    def get_match(self, matches, *, index=0, inverse=False) -> Poses:
-        Rs = []
-        ts = []
-        for match in matches:
-            rot = self.qs[match[index]].rotation_matrix
-            tr = self.ps[match[index]]
-            if inverse:
-                rot = rot.T
-                tr = -rot @ tr
-            Rs.append(rot)
-            ts.append(tr)
-        return Rs, ts
-
-    def get_all(self, *, inverse=False) -> Poses:
-        Rs = []
-        ts = []
-        for i in range(len(self)):
-            rot = self.qs[i].rotation_matrix
-            tr = self.ps[i]
-            if inverse:
-                rot = rot.T
-                tr = -rot @ tr
-            Rs.append(rot)
-            ts.append(tr)
-        return Rs, ts
-
-    def match_series(self, matches, index=0) -> "TimePoseSeries":
-        ts = []
-        qs = []
-        ps = []
-        for match in matches:
-            ts.append(self.t_us[match[index]])
-            qs.append(self.qs[match[index]])
-            ps.append(self.ps[match[index]])
-        ts = np.array(ts)
-        ps = np.array(ps)
-        return TimePoseSeries(ts, qs, ps)
-
-    def downsample(
-        self,
-        *,
-        factor: int | None = None,
-        t_gap: float | None = None,
-    ) -> "TimePoseSeries":
-        assert factor is not None or t_gap is not None
-        if factor is None and t_gap is not None:
-            factor = int(np.ceil(t_gap * self.rate))
-        assert factor is not None
-        factor = max(factor, 1)
-        ts = self.t_us[::factor]
-        qs = self.qs[::factor]
-        ps = self.ps[::factor]
-        return TimePoseSeries(ts, qs, ps)
+    def get_all(self, *, inverse=False) -> PoseSeries:
+        if inverse:
+            rots = self.rots.inv()
+            trans = -rots.apply(self.trans)
+            return PoseSeries(rots, trans)
+        return PoseSeries(self.rots, self.trans)
 
     def interpolate(self, t_new_us: Time):
-        qs = slerp_quaternion(
-            qs=self.qs,
-            t_old_us=self.t_us,
-            t_new_us=t_new_us,
-        )
+        rots = slerp_rotation(self.rots, t_old_us=self.t_us, t_new_us=t_new_us)
         ps = interpolate_vector3d(
-            vec3d=self.ps,
-            t_old_us=self.t_us,
-            t_new_us=t_new_us,
+            vec3d=self.trans, t_old_us=self.t_us, t_new_us=t_new_us
         )
-        return TimePoseSeries(t_new_us, qs, ps)
+        return TimePoseSeries(t_new_us, rots, ps)
 
-    def get_range(self, start: int | None = None, end: int | None = None):
-        start = max(0, int(start * self.rate)) if start is not None else None
-        end = min(len(self), int(end * self.rate)) if end is not None else None
-        return TimePoseSeries(
-            self.t_us[start:end],
-            self.qs[start:end],
-            self.ps[start:end],
-        )
+    def transform_global(self, tf: Transform):
+        self.rots = tf.rot * self.rots
+        self.trans = tf.tran + tf.rot.apply(self.trans)
+
+    def transform_local(self, tf: Transform):
+        self.trans = self.trans + self.rots.apply(tf.tran)
+        self.rots = self.rots * tf.rot
 
 
 @dataclass
 class CalibrationData:
-    rot_sensor_gt: NDArray | None
-    tr_sensor_gt: NDArray | None
-    rot_ref_sensor_gt: NDArray | None
-    tr_ref_sensor_gt: NDArray | None
+    tf_sg_local: Transform
+    tf_sg_global: Transform
+    notes: str = ""
 
-    err_sensor_gt: tuple | None
-    err_ref_sensor_gt: tuple | None
+    @classmethod
+    def identity(cls):
+        return cls(Transform.identity(), Transform.identity())
 
-    _file_path: Path | None = None
-
-    def __init__(
-        self,
-        rot_sensor_gt: NDArray | None = None,
-        tr_sensor_gt: NDArray | None = None,
-        rot_ref_sensor_gt: NDArray | None = None,
-        tr_ref_sensor_gt: NDArray | None = None,
-        err_sensor_gt: tuple | None = None,
-        err_ref_sensor_gt: tuple | None = None,
-        file_path: Path | None = None,
-    ):
-        self.rot_sensor_gt = rot_sensor_gt
-        self.tr_sensor_gt = tr_sensor_gt
-        self.rot_ref_sensor_gt = rot_ref_sensor_gt
-        self.tr_ref_sensor_gt = tr_ref_sensor_gt
-        self.err_sensor_gt = err_sensor_gt
-        self.err_ref_sensor_gt = err_ref_sensor_gt
-        self._file_path = file_path
-
-    @property
-    def rot_gt_sensor(self) -> NDArray | None:
-        if self.rot_sensor_gt is None:
-            return None
-        return self.rot_sensor_gt.T
-
-    @property
-    def tr_gt_sensor(self) -> NDArray | None:
-        if self.tr_sensor_gt is None or self.rot_sensor_gt is None:
-            return None
-        return -self.rot_sensor_gt.T @ self.tr_sensor_gt
-
-    @property
-    def rot_ref_gt_sensor(self) -> NDArray | None:
-        if self.rot_ref_sensor_gt is None:
-            return None
-        return self.rot_ref_sensor_gt.T
-
-    @property
-    def tr_ref_gt_sensor(self) -> NDArray | None:
-        if self.tr_ref_sensor_gt is None or self.rot_ref_sensor_gt is None:
-            return None
-        return -self.rot_ref_sensor_gt.T @ self.tr_ref_sensor_gt
-
-    @property
-    def tf_gs_local(self):
-        assert self.rot_sensor_gt is not None
-        assert self.tr_sensor_gt is not None
-        rot = self.rot_sensor_gt.T
-        trans = -rot @ self.tr_sensor_gt
-        return (rot, trans)
-
-    @property
-    def tf_world(self):
-        return (self.rot_ref_gt_sensor, self.tr_ref_gt_sensor)
-
-    @staticmethod
-    def from_json(json_path: Path) -> "CalibrationData":
-        with open(json_path, "r") as f:
+    @classmethod
+    def from_json(cls, path: Path):
+        with open(path, "r") as f:
             data = json.load(f)
             if not isinstance(data, list) or len(data) != 1:
                 raise ValueError("Invalid JSON format")
             data = data[0]
 
-            return CalibrationData(
-                rot_sensor_gt=np.array(data["rot_sensor_gt"]),
-                tr_sensor_gt=np.array(data["trans_sensor_gt"]).flatten(),
-                rot_ref_sensor_gt=np.array(data["rot_ref_sensor_gt"]),
-                tr_ref_sensor_gt=np.array(data["trans_ref_sensor_gt"]).flatten(),
-                file_path=json_path,
-            )
+            rot_local = np.array(data["rot_sensor_gt"])
+            trans_local = np.array(data["trans_sensor_gt"]).flatten()
+            tf_sg_local = Transform(Rotation.from_matrix(rot_local), trans_local)
 
-    def to_json(self, json_path: Path | str, notes_ext: str = "") -> None:
-        rot_sensor_gt = (
-            self.rot_sensor_gt.tolist() if self.rot_sensor_gt is not None else ""
-        )
-        rot_ref_sensor_gt = (
-            self.rot_ref_sensor_gt.tolist()
-            if self.rot_ref_sensor_gt is not None
-            else ""
-        )
-        tr_sensor_gt = (
-            self.tr_sensor_gt.tolist() if self.tr_sensor_gt is not None else ""
-        )
-        tr_ref_sensor_gt = (
-            self.tr_ref_sensor_gt.tolist() if self.tr_ref_sensor_gt is not None else ""
-        )
-        err_sensor_gt = (
-            list(self.err_sensor_gt) if self.err_sensor_gt is not None else []
-        )
-        err_ref_sensor_gt = (
-            list(self.err_ref_sensor_gt) if self.err_ref_sensor_gt is not None else []
-        )
+            rot_global = np.array(data["rot_ref_sensor_gt"])
+            trans_global = np.array(data["trans_ref_sensor_gt"]).flatten()
+            tf_sg_global = Transform(Rotation.from_matrix(rot_global), trans_global)
+            return cls(tf_sg_local, tf_sg_global)
 
-        notes = (
-            "Pose: Sensor_Groundtruth,Error: [mean_rot_err, mean_trans_err, max_rot_err, max_trans_err]. "
-            + notes_ext
-        )
+    def to_json(self, json_path: Path, notes_ext: str = ""):
+        rot_sensor_gt = self.tf_sg_global.rot.as_matrix().tolist()
+        tr_sensor_gt = self.tf_sg_global.tran.tolist()
+        rot_ref_sensor_gt = self.tf_sg_global.rot.as_matrix().tolist()
+        tr_ref_sensor_gt = self.tf_sg_global.tran.tolist()
 
         with open(json_path, "w") as f:
             json.dump(
@@ -375,10 +244,8 @@ class CalibrationData:
                         "trans_sensor_gt": tr_sensor_gt,
                         "rot_ref_sensor_gt": rot_ref_sensor_gt,
                         "trans_ref_sensor_gt": tr_ref_sensor_gt,
-                        "err_sensor_gt": err_sensor_gt,
-                        "err_ref_sensor_gt": err_ref_sensor_gt,
                         "file_path": str(json_path),
-                        "notes": notes,
+                        "notes": self.notes + notes_ext,
                     }
                 ],
                 f,
@@ -412,10 +279,10 @@ class IMUData:
     acce: NDArray
     gyro: NDArray
     rate: float
+    ahrs_rots: Rotation
 
     def __init__(self, file_path: str | Path, *, t_base_us: int = 0) -> None:
         self.file_path = str(file_path)
-        self.ahrs_qs: list[Quaternion] = []
         self.load_data(t_base_us)
         self.__len__()
 
@@ -428,16 +295,14 @@ class IMUData:
         # timestamp [us],w_RS_S_x [rad s^-1],w_RS_S_y [rad s^-1],w_RS_S_z [rad s^-1],
         # a_RS_S_x [m s^-2],a_RS_S_y [m s^-2],a_RS_S_z [m s^-2],
         # q_RS_w [],q_RS_x [],q_RS_y [],q_RS_z []
-        df: pd.DataFrame = pd.read_csv(self.file_path)
+        df: pd.DataFrame = pd.read_csv(self.file_path).dropna()
         raw_data = df.to_numpy()
 
-        self.t_us = raw_data[:, 0].astype(np.int64)
+        self.t_us = raw_data[:, 0]
         self.gyro = raw_data[:, 1:4]  # angular velocity
         self.acce = raw_data[:, 4:7]  # linear acceleration
-        self.raw_ahrs = raw_data[:, 7:11]  # orientation
-
-        # Convert quaternions to unit quaternions
-        self.ahrs_qs = [Quaternion(q).unit for q in self.raw_ahrs]
+        self.raw_ahrs = raw_data[:, 7:11]  # orientation wxyz
+        self.ahrs_rots = Rotation.from_quat(self.raw_ahrs, scalar_first=True)
 
         if len(self.t_us) > 1:
             self.t_us_f0 = self.t_us - self.t_us[0]
@@ -465,8 +330,8 @@ class IMUData:
 
         return TimePoseSeries(
             t_us=self.t_sys_us[:max_idx],
-            qs=self.ahrs_qs[:max_idx],
-            ps=np.zeros((len(self.ahrs_qs[:max_idx]), 3)),
+            rots=self.ahrs_rots[:max_idx],
+            ps=np.zeros((len(self.t_sys_us[:max_idx]), 3)),
         )
 
     def save_csv(self, path: str | Path):
@@ -478,7 +343,7 @@ class IMUData:
                 self.t_us[:, np.newaxis],
                 self.gyro,
                 self.acce,
-                np.array([q.elements for q in self.ahrs_qs]),
+                self.ahrs_rots.as_quat(scalar_first=True),
                 self.t_sys_us[:, np.newaxis],
             ]
         )
@@ -494,27 +359,17 @@ class IMUData:
         self.gyro = interpolate_vector3d(
             vec3d=self.gyro, t_old_us=self.t_sys_us, t_new_us=t_new_us
         )
-        self.ahrs_qs = slerp_quaternion(
-            qs=self.ahrs_qs, t_old_us=self.t_sys_us, t_new_us=t_new_us
-        )
+        self.ahrs_rots = slerp_rotation(self.ahrs_rots, self.t_sys_us, t_new_us)
         self.t_sys_us = t_new_us
 
-    def transform_to_world(
-        self, *, rots: NDArray | None = None, qs: list[Quaternion] | None = None
-    ):
-        if rots is None and qs is not None:
-            rots = np.array([q.rotation_matrix for q in qs])
+    def transform_to_world(self, *, rots: Rotation | None = None):
         # 默认使用 AHRS 的数据进行变换
-        if rots is None and qs is None:
-            rots = np.array([q.rotation_matrix for q in self.ahrs_qs])
+        if rots is None:
+            rots = self.ahrs_rots
 
-        assert rots is not None, "Either rots or qs must be provided"
-        assert len(rots) == len(self), (
-            f"Length mismatch, got {len(rots)} but expected {len(self)}"
-        )
-        # rots (i, j, k) acce (i, k) -> (i, j)  (3, 3) (3,1) -> (3,1)
-        self.world_acce = np.einsum("ijk,ik->ij", rots, self.acce)  # type: ignore
-        self.world_gyro = np.einsum("ijk,ik->ij", rots, self.gyro)  # type: ignore
+        assert len(rots) == len(self), f"Length mismatch, {len(rots)} != {len(self)}"
+        self.world_gyro = rots.apply(self.gyro)
+        self.world_acce = rots.apply(self.acce)
 
 
 class ARCoreColumn:
@@ -540,9 +395,11 @@ class ARCoreData:
         self.z_up = z_up
 
         if self.z_up:
-            self.base_sensor_cam = Quaternion()
+            self.base_sensor_cam = Rotation.identity()
         else:
-            self.base_sensor_cam = Quaternion(axis=[1, 0, 0], angle=np.pi / 2)
+            self.base_sensor_cam = Rotation.from_euler(
+                angles=[np.pi / 2, 0, 0], seq="xyz"
+            )
 
         self.load_data(t_base_us)
 
@@ -550,10 +407,7 @@ class ARCoreData:
         return self.sensor_t_us.__len__()
 
     def _transform_world(self, ps):
-        return np.einsum("ij,kj->ki", self.base_sensor_cam.rotation_matrix, ps)
-
-    def _to_q_obj(self, qs):
-        return [(self.base_sensor_cam * Quaternion(q)).unit for q in qs]
+        return self.base_sensor_cam.apply(ps)
 
     def load_data(self, t_base_us=0):
         # #timestamp [us],p_RS_R_x [m],p_RS_R_y [m],p_RS_R_z [m],q_RS_w [],q_RS_x [],q_RS_y [],q_RS_z []
@@ -565,7 +419,9 @@ class ARCoreData:
 
         # convert to Quaternion object
         self.t_us_f0 = self.sensor_t_us - self.sensor_t_us[0]
-        self.sensor_qs = self._to_q_obj(self.raw_sensor_qs)
+        self.sensor_rots = self.base_sensor_cam * Rotation.from_quat(
+            self.raw_sensor_qs, scalar_first=True
+        )
         self.sensor_ps = self._transform_world(self.raw_sensor_ps)
         self.rate = float(1e6 / np.mean(np.diff(self.sensor_t_us)))
 
@@ -576,14 +432,14 @@ class ARCoreData:
             self.t_sys_us = self.raw_data[:, 15]
 
             self.cam_ps = self._transform_world(self.raw_cam_ps)
-            self.cam_qs = self._to_q_obj(self.raw_cam_qs)
+            self.cam_rots = Rotation.from_quat(self.raw_cam_qs, scalar_first=True)
             # 根据 self.t_us 的时间间隔更新 self.t_sys_us，使其与 self.t_us 保持一致
             # 使用 t_us 的时间基准，但保持 t_sys_us 的起始时间
             self.t_sys_us = self.t_sys_us[0] + self.t_us_f0
         else:
             print("Warning: No extended data available")
             self.cam_ps = self.sensor_ps
-            self.cam_qs = self.sensor_qs
+            self.cam_rots = self.sensor_rots
             self.t_sys_us = self.t_us_f0 + t_base_us
 
     def get_time_pose_series(
@@ -594,7 +450,9 @@ class ARCoreData:
             max_idx = min(max_idx, int(t_len_s * 1e6))
         return TimePoseSeries(
             t_us=self.t_sys_us[:max_idx],
-            qs=self.sensor_qs[:max_idx] if not using_cam else self.cam_qs[:max_idx],
+            rots=self.sensor_rots[:max_idx]
+            if not using_cam
+            else self.cam_rots[:max_idx],
             ps=self.sensor_ps[:max_idx] if not using_cam else self.cam_ps[:max_idx],
         )
 
@@ -606,9 +464,9 @@ class ARCoreData:
             [
                 self.sensor_t_us[:, np.newaxis],
                 self.sensor_ps,
-                np.array([q.elements for q in self.sensor_qs]),
+                self.sensor_rots.as_quat(scalar_first=True),
                 self.cam_ps,
-                np.array([q.elements for q in self.cam_qs]),
+                self.cam_rots.as_quat(scalar_first=True),
                 self.t_sys_us[:, np.newaxis],
             ]
         )
@@ -640,8 +498,10 @@ class ARCoreData:
 
 
 class RTABData:
-    rate: float
     t_len_s: float
+    rate: float
+    node_rots: Rotation
+    opt_rots: Rotation
 
     def __init__(
         self,
@@ -654,14 +514,12 @@ class RTABData:
         self.calibr_data = calibr_data
 
         self.opt_ids: list[int] = []
-        self.opt_qs: list[Quaternion] = []
         self.opt_ps: NDArray
         self.opt_t_us: NDArray[np.int64]
 
         self.node_t_us: NDArray[np.int64]
         self.t_us_f0: NDArray[np.int64]
         self.node_ids: list[int] = []
-        self.node_qs: list[Quaternion] = []
         self.node_ps: NDArray
 
         if self.file_path.endswith(".csv"):
@@ -682,17 +540,14 @@ class RTABData:
         self.t_sys_us = self.node_t_us
         self.rate = float(1e6 / np.mean(np.diff(self.node_t_us)))
         self.t_len_s = (self.node_t_us[-1] - self.node_t_us[0]) / 1e6
-        print(
-            f"Loaded {len(self.node_ids)} nodes, {len(self.opt_ids)} optimized witch Freq: {self.rate:.2f} from the database. "
-        )
 
     def load_csv_data(self):
         # #timestamp [us],p_RN_x [m],p_RN_y [m],p_RN_z [m],q_RN_w [],q_RN_x [],q_RN_y [],q_RN_z []
         data = pd.read_csv(self.file_path).to_numpy()
         self.node_t_us = data[:, 0]
         self.node_ps = data[:, 1:4]
-        self.node_qs = [Quaternion(*q).unit for q in data[:, 4:]]
-        self.opt_qs = self.node_qs
+        self.node_rots = Rotation.from_quat(data[:, 4:], scalar_first=True)
+        self.opt_rots = self.node_rots
         self.opt_ps = self.node_ps
 
     @classmethod
@@ -711,7 +566,7 @@ class RTABData:
             return None
 
     @classmethod
-    def _unpack_pose_data(cls, blob_data):
+    def _unpack_pose_data(cls, blob_data) -> Transform | None:
         """解压并解析RTAB-Map的pose数据"""
         decompressed_data = cls._decompress_data(blob_data)
         if decompressed_data and len(decompressed_data) >= 48:
@@ -719,11 +574,7 @@ class RTABData:
             pose_matrix = np.array(pose_values).reshape(3, 4)
             p = pose_matrix[:3, 3]
             R = pose_matrix[:3, :3]
-            U, _, Vt = np.linalg.svd(R)
-            R_orthogonal = U @ Vt @ np.diag([1, 1, np.linalg.det(U @ Vt)])
-            unit_q = Quaternion(matrix=R_orthogonal).unit
-            # unit_q = rotation_matrix_to_quaternion(R).unit
-            return p, unit_q
+            return Transform.from_raw(R, p)
         return None
 
     def load_opt_data(self):
@@ -738,20 +589,21 @@ class RTABData:
             "Failed to decompress admin_opt_poses data"
         )
 
+        opt_rots = []
         opt_ps = []
         for pose_values in struct.iter_unpack("12f", decompressed_data):
             pose_matrix = np.array(pose_values).reshape(3, 4)
-
             R = pose_matrix[:3, :3]
             p = pose_matrix[:3, 3]
-            unit_q = Quaternion(matrix=OrtR(R)).unit
+            opt_rots.append(R)
             opt_ps.append(p)
-            self.opt_qs.append(unit_q)
 
             # calibr
             if self.calibr_data:
                 pass
+        self.opt_rots = Rotation.from_matrix(opt_rots)
         self.opt_ps = np.array(opt_ps)
+
         # 查询Admin表中的 opt_ids 数据
         admin_opt_ids = self.cursor.execute(
             "SELECT opt_ids FROM Admin WHERE opt_ids IS NOT NULL"
@@ -764,7 +616,7 @@ class RTABData:
             struct.unpack(f"{len(decompressed_ids) // 4}i", decompressed_ids)
         )
         assert (
-            self.opt_ids.__len__() == self.opt_ps.__len__() == self.opt_qs.__len__()
+            self.opt_ids.__len__() == self.opt_ps.__len__() == self.opt_rots.__len__()
         ), "Mismatch in lengths of opt_ids, ps, and unit_qs"
 
         # 通过 ids 获取时间戳
@@ -782,20 +634,25 @@ class RTABData:
         assert results, f"No node data found in the database. {self.file_path}"
 
         node_t_us = []
+        node_rots = []
         node_ps = []
         for node_id, stamp, pose_blob in results:
             pose = self._unpack_pose_data(pose_blob)
             if pose is None:
                 continue
 
-            p, unit_q = pose
             self.node_ids.append(node_id)
             node_t_us.append(int(stamp * 1e6))  # convert to us
-            node_ps.append(p)
-            self.node_qs.append(unit_q)
+            node_rots.append(pose.rot)
+            node_ps.append(pose.tran)
 
         self.node_t_us = np.array(node_t_us)
+        self.node_rots = Rotation.from_matrix(node_rots)
         self.node_ps = np.array(node_ps)
+
+        print(
+            f"Loaded {len(self.node_ids)} nodes, {len(self.opt_ids)} optimized witch Freq: {self.rate:.2f} from the database. "
+        )
 
     def get_time_pose_series(
         self, t_len_s: int | None = None, *, using_opt: bool = False
@@ -804,10 +661,7 @@ class RTABData:
         if t_len_s is not None:
             max_idx = min(max_idx, int(t_len_s * self.rate))
         return TimePoseSeries(
-            # self.node_t_us  == self.t_sys_us
-            t_us=self.t_sys_us[:max_idx] if not using_opt else self.opt_t_us[:max_idx],
-            qs=self.node_qs[:max_idx] if not using_opt else self.opt_qs[:max_idx],
-            ps=self.node_ps[:max_idx] if not using_opt else self.opt_ps[:max_idx],
+            self.t_sys_us[:max_idx], self.node_rots[:max_idx], self.node_ps[:max_idx]
         )
 
     def fix_time(self, t_21_us: int):
@@ -816,8 +670,8 @@ class RTABData:
         self.opt_t_us += t_21_us
 
     def interpolate(self, t_new_us: NDArray):
-        self.node_qs = slerp_quaternion(
-            qs=self.node_qs, t_old_us=self.t_sys_us, t_new_us=t_new_us
+        self.node_rots = slerp_rotation(
+            self.node_rots, t_old_us=self.t_sys_us, t_new_us=t_new_us
         )
         self.node_ps = interpolate_vector3d(
             vec3d=self.node_ps, t_old_us=self.t_sys_us, t_new_us=t_new_us
@@ -908,7 +762,7 @@ class RTABData:
             [
                 self.t_sys_us.reshape(-1, 1),
                 self.node_ps,
-                np.array([q.elements for q in self.node_qs]),
+                self.node_rots.as_quat(scalar_first=True),
                 # self.opt_ps,
                 # np.array([q.elements for q in self.opt_qs])
             ],

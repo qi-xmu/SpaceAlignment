@@ -4,6 +4,7 @@ import rerun as rr
 from numpy._typing import NDArray
 
 import rerun_ext.rerun_calibration as rrec
+from base.basetype import PoseSeries, Transform
 from base.interpolate import get_time_series
 from time_diff import match_correlation
 
@@ -12,8 +13,6 @@ from .datatype import (
     CalibrationData,
     GroupData,
     IMUData,
-    Pose,
-    Poses,
     RTABData,
     TimePoseSeries,
     UnitData,
@@ -42,35 +41,24 @@ def compose_transform(R1: NDArray, t1: NDArray, R2: NDArray, t2: NDArray):
 
 
 def _calibrate_T_gc(
-    poses_base_gripper: Poses,
-    poses_camera_target: Poses,
-    pose_camera_gripper=(None, None),
+    pose_bg: PoseSeries,
+    pose_ct: PoseSeries,
+    pose_cg: Transform | None = None,
     alg=HandEyeAlg.Park,
     rot_only=False,
-) -> Pose:
+) -> Transform:
     """calibrateHandEye return R_gc, t_gc
     隐含信息：base 和 target 为刚体，gripper 和 camera 为刚体。
     """
-    assert len(poses_base_gripper[0]) > 10, "Not enough data points"
-    assert len(poses_base_gripper[0]) == len(poses_camera_target[0]), (
-        f"{len(poses_base_gripper[0])} != {len(poses_camera_target[0])}"
-    )
+    assert len(pose_bg) > 10, f"Not enough data points {len(pose_bg)}"
+    assert len(pose_bg) == len(pose_ct), f"{len(pose_bg)} != {len(pose_ct)}"
     # 标定
     if rot_only:
-        poses_base_gripper = (
-            poses_base_gripper[0],
-            [np.zeros(3) for _ in range(len(poses_base_gripper[1]))],
-        )
-        poses_camera_target = (
-            poses_camera_target[0],
-            [np.zeros(3) for _ in range(len(poses_camera_target[1]))],
-        )
+        pose_bg.reset_trans()
+        pose_ct.reset_trans()
 
     R_gc, t_gc = cv2.calibrateHandEye(
-        *poses_base_gripper,
-        *poses_camera_target,
-        *pose_camera_gripper,
-        method=alg,
+        *pose_bg.get_series(), *pose_ct.get_series(), method=alg
     )
     rvec = cv2.Rodrigues(R_gc)[0]
     ang = np.linalg.norm(rvec)
@@ -78,7 +66,8 @@ def _calibrate_T_gc(
         rvec = rvec / ang
     print("旋转向量: ", rvec.flatten(), ang * 180 / np.pi)
     print("位移: ", t_gc.flatten())
-    return R_gc, t_gc.flatten()
+
+    return Transform.from_raw(R_gc, t_gc.flatten())
 
 
 # %% 误差评估
@@ -130,7 +119,7 @@ def _calibrate_b1_b2(
     cs1: TimePoseSeries,
     cs2: TimePoseSeries,
     *,
-    calibr_data: CalibrationData = CalibrationData(),
+    calibr_data: CalibrationData = CalibrationData.identity(),
     is_body_calc: bool = True,
     is_ref_calc: bool = True,
     is_t_diff=True,
@@ -147,17 +136,14 @@ def _calibrate_b1_b2(
         poses_ref1_body1 = cs1.get_all()
         poses_body2_ref2 = cs2.get_all(inverse=True)
         pose_body1_body2 = _calibrate_T_gc(
-            poses_ref1_body1,
-            poses_body2_ref2,
-            (calibr_data.rot_sensor_gt, calibr_data.tr_sensor_gt),
-            rot_only=rot_only,
+            poses_ref1_body1, poses_body2_ref2, rot_only=rot_only
         )
         err_b1_b2 = calibrate_evaluate(
             pose_body1_body2, poses_ref1_body1, poses_body2_ref2, rot_only=rot_only
         )
         poses_ref1_body1, poses_body2_ref2 = None, None
     else:
-        pose_body1_body2 = (None, None)
+        pose_body1_body2 = Transform.identity()
         err_b1_b2 = None
 
     if is_ref_calc:
@@ -165,35 +151,35 @@ def _calibrate_b1_b2(
         poses_body1_ref1 = cs1.get_all(inverse=True)
         poses_ref2_body2 = cs2.get_all()
         pose_ref1_ref2 = _calibrate_T_gc(
-            poses_body1_ref1,
-            poses_ref2_body2,
-            (calibr_data.rot_ref_sensor_gt, calibr_data.tr_ref_sensor_gt),
-            rot_only=rot_only,
+            poses_body1_ref1, poses_ref2_body2, rot_only=rot_only
         )
         err_r1_r2 = calibrate_evaluate(
             pose_ref1_ref2, poses_body1_ref1, poses_ref2_body2, rot_only=rot_only
         )
         poses_body1_ref1, poses_ref2_body2 = None, None
     else:
-        pose_ref1_ref2 = (None, None)
+        pose_ref1_ref2 = Transform.identity()
         err_r1_r2 = None
 
     cd = CalibrationData(
-        *pose_body1_body2,
-        *pose_ref1_ref2,
-        err_b1_b2,
-        err_r1_r2,
+        pose_body1_body2,
+        pose_ref1_ref2,
+        notes=f"err_sg_local = {err_b1_b2} err_sg_global = {err_r1_r2}",
     )
     return cd
 
 
-def calibrate_evaluate(pose_gc: Pose, poses_bg, poses_ct, *, rot_only=False):
+def calibrate_evaluate(
+    pose_gc: Transform, poses_bg: PoseSeries, poses_ct: PoseSeries, *, rot_only=False
+):
     rot_errors = []
     trans_errors = []
     if rot_only:
-        pose_gc = pose_gc[0], np.zeros(3)
-    for RA, tA, RB, tB in zip(*_get_A_B(*poses_bg, *poses_ct)):
-        deg, trans = _transform_error(RA, tA, RB, tB, *pose_gc)
+        pose_gc.tran = np.zeros(3)
+    for RA, tA, RB, tB in zip(
+        *_get_A_B(*poses_bg.get_series(), *poses_ct.get_series())
+    ):
+        deg, trans = _transform_error(RA, tA, RB, tB, *pose_gc.get_raw())
         rot_errors.append(deg)
         trans_errors.append(trans)
 
@@ -203,17 +189,6 @@ def calibrate_evaluate(pose_gc: Pose, poses_bg, poses_ct, *, rot_only=False):
     print("平均误差 旋转（度）/ 平移（米）: {:.5f} / {:.5f}".format(*meas_err))
     print("最大误差 旋转（度）/ 平移（米）: {:.5f} / {:.5f}".format(*max_err))
     return meas_err, max_err
-
-
-# def calibrate_sensor_camera(cam_data: ARCoreData):
-#     cs_sensor = cam_data.get_time_pose_series(using_cam=False)
-#     cs_camera = cam_data.get_time_pose_series(using_cam=True)
-#     print("--------------- 计算 Sensor - Camera")
-#     cs_sc = _calibrate_b1_b2(
-#         cs1=cs_sensor,
-#         cs2=cs_camera,
-#     )
-#     return cs_sc
 
 
 def calibrate_pose_series(
@@ -228,14 +203,12 @@ def calibrate_pose_series(
         print("------------- 计算 AHRS - Sensor")
         cd_ic = _calibrate_b1_b2(cs1=cs_i, cs2=cs_c, rot_only=True)
         cd = cd_cg
-        assert cd_ic.rot_ref_sensor_gt is not None
-        # 公式 R_ig = R_ic @ R_cg, t_ig = R_ic @ t_cg
-        cd.rot_ref_sensor_gt = cd_ic.rot_ref_sensor_gt @ cd_cg.rot_ref_sensor_gt
-        cd.tr_ref_sensor_gt = cd_ic.rot_ref_sensor_gt @ cd_cg.tr_ref_sensor_gt
+        assert cd_ic.tf_sg_global is not None
+        cd.tf_sg_global = cd_ic.tf_sg_global * cd_cg.tf_sg_global
         return cd, cd_ic
     else:
         cd = _calibrate_b1_b2(cs1=cs_i, cs2=cs_g, rot_only=True)
-    return cd, CalibrationData()
+    return cd, CalibrationData.identity()
 
 
 def calibrate_unit(

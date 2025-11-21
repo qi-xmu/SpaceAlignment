@@ -2,30 +2,27 @@ from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
-from pyquaternion import Quaternion
 from scipy.signal import correlate
+from scipy.spatial.transform import Rotation
 
 from base.datatype import ARCoreData, IMUData, RTABData, Time, TimePoseSeries, UnitData
 from base.interpolate import get_time_series
 
 
-def get_angvels(
-    t_us: Time,
-    qs: list[Quaternion],
-    step: int = 1,
-):
+def get_angvels(t_us: Time, rots: Rotation, step: int = 1):
     """获取角速度列表"""
-    n = len(qs)
+    n = len(rots)
     step = max(int(step), 1)
     assert n >= 2, "At least two rotations are required"
 
     As: list = []
     Ts = []
     for i in range(0, n - step, step):
-        q_ij = qs[i].inverse * qs[i + step]
+        drot = rots[i].inv() * rots[i + step]
+        angle = float(np.linalg.norm(drot.as_rotvec()))
         dt_s = (t_us[i + step] - t_us[i]) * 1e-6
         assert dt_s > 0, "Time difference must be positive"
-        ang_vel = q_ij.angle / dt_s
+        ang_vel = angle / dt_s
         As.append(ang_vel)
         Ts.append(t_us[i])
     return As, Ts
@@ -49,8 +46,8 @@ def match_correlation(
     cs2 = cs2.interpolate(t_new_us)
     print(f"使用时间范围：{(cs1.t_us[-1] - cs1.t_us[0]) / 1e6} 秒")
 
-    seq1, t1 = get_angvels(cs1.t_us, cs1.qs, step=1)
-    seq2, t2 = get_angvels(cs2.t_us, cs2.qs, step=1)
+    seq1, t1 = get_angvels(cs1.t_us, cs1.rots, step=1)
+    seq2, t2 = get_angvels(cs2.t_us, cs2.rots, step=1)
     t_new_us = t1
 
     corr = correlate(seq1, seq2, mode="full")

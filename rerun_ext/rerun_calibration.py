@@ -1,9 +1,7 @@
-import numpy as np
 import rerun as rr
 import rerun.blueprint as rrb
 
 from base.datatype import ARCoreData, CalibrationData, IMUData, RTABData
-from base.space import transform_world
 
 from . import log_coordinate, send_columns_path
 
@@ -66,7 +64,7 @@ def rerun_init(name: str):
 def send_imu_cam_data(
     imu_data: IMUData,
     cam_data: ARCoreData | None = None,
-    cd_ic: CalibrationData = CalibrationData(),
+    cd_ic: CalibrationData = CalibrationData.identity(),
 ):
     ts_imu = rr.TimeColumn("timestamp", timestamp=imu_data.t_sys_us * 1e-6)
     rr.send_columns(
@@ -82,7 +80,8 @@ def send_imu_cam_data(
     rr.log(
         "/world/W_TO_CAM",
         rr.Transform3D(
-            mat3x3=cd_ic.rot_ref_sensor_gt, translation=cd_ic.tr_ref_sensor_gt
+            mat3x3=cd_ic.tf_sg_global.rot.as_matrix(),
+            translation=cd_ic.tf_sg_global.tran,
         ),
         static=True,
     )
@@ -92,8 +91,7 @@ def send_imu_cam_data(
         log_coordinate(
             "/world/W_TO_CAM/sensor", length=0.1, labels=["Sensor"], show_labels=True
         )
-
-        qs = [[q.x, q.y, q.z, q.w] for q in cam_data.sensor_qs]
+        qs = cam_data.sensor_rots.as_quat()
         rr.send_columns(
             "/world/W_TO_CAM/sensor",
             indexes=[ts_cam],
@@ -111,11 +109,7 @@ def send_imu_cam_data(
 
 
 def send_gt_data(gt_data: RTABData, calibr_data: CalibrationData):
-    gt_data.node_qs, gt_data.node_ps = transform_world(
-        tf_world=(calibr_data.rot_ref_sensor_gt, calibr_data.tr_ref_sensor_gt),
-        qs=gt_data.node_qs,
-        ps=gt_data.node_ps,
-    )
+    gs = gt_data.get_time_pose_series()
 
     times = rr.TimeColumn("timestamp", timestamp=gt_data.node_t_us * 1e-6)
     # rr.log(
@@ -133,7 +127,7 @@ def send_gt_data(gt_data: RTABData, calibr_data: CalibrationData):
         labels=["Groundtruth"],
         show_labels=True,
     )
-    qs = np.array([[q.x, q.y, q.z, q.w] for q in gt_data.node_qs])
+    qs = gt_data.node_rots.as_quat()
     rr.send_columns(
         "/world/W_TO_GT/groundtruth",
         indexes=[times],
@@ -155,11 +149,12 @@ def send_gt_data(gt_data: RTABData, calibr_data: CalibrationData):
         labels=["Estimate"],
         show_labels=True,
     )
+
+    tf_gs_local = calibr_data.tf_sg_local.inverse()
     rr.log(
         "/world/W_TO_GT/groundtruth/sensor",
         rr.Transform3D(
-            mat3x3=calibr_data.rot_gt_sensor,
-            translation=calibr_data.tr_gt_sensor,
+            mat3x3=tf_gs_local.rot.as_matrix(), translation=tf_gs_local.tran
         ),
         static=True,
     )

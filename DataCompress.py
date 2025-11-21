@@ -12,11 +12,10 @@ Usage:
     python DataCompress.py -d <dataset_path> -o <output_path>
 """
 
-import argparse
 import os
 from pathlib import Path
 
-from base.action import dataset_action, dataset_action_pa
+from base.action import dataset_action, dataset_action_pa  # noqa
 from base.args_parser import DatasetArgsParser
 from base.datatype import ARCoreData, IMUData, NavioDataset, RTABData, UnitData
 

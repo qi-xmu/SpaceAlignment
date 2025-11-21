@@ -82,10 +82,10 @@ def UnitCovert(
 
     # TODO  计算 IMU 旋转到全局坐标系下的数值，以及真值对齐到 IMU 的旋转矩阵 T_WI.
     if not target_path.npy_file.exists() or regen:
-        # 计算新数据
+        # 真值空间变换
         # Groundtruth Body -> Sensor Body
         qs, ps = transform_local(
-            tf_local=cd.tf_local,
+            tf_local=cd.tf_gs_local,
             qs=gt_data.node_qs,
             ps=gt_data.node_ps,
         )

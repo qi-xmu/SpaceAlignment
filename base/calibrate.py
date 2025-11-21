@@ -241,6 +241,7 @@ def calibrate_pose_series(
 def calibrate_unit(
     ud: UnitData,
     *,
+    no_group=False,
     t_len_s=30,
     using_rerun: bool = True,
 ):
@@ -277,7 +278,10 @@ def calibrate_unit(
             rrec.send_imu_cam_data(imu_data)
             rrec.send_gt_data(gt_data, cd)
 
-    cd.to_json(ud.calibr_path, notes)
+    save_path = ud.calibr_path
+    if no_group:
+        save_path = ud.unit_calib_file
+    cd.to_json(save_path, notes)
     if using_rerun:
         rr.save(ud.target("data.rrd"))
     return cd

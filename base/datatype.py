@@ -51,9 +51,10 @@ class UnitData:
             self.group_path = self.group_path.parent
 
         # 标定文件
+        self.unit_calib_file = self.base_dir.joinpath("Calibration.json")
         calibr_file = self.group_path.joinpath(self._CALIBR_FILE.format(device_name))
         if not calibr_file.exists():
-            calibr_file = self.base_dir.joinpath("Calibration.json")
+            calibr_file = self.unit_calib_file
         self.calibr_path = calibr_file
         self.is_z_up = False
 
@@ -312,8 +313,12 @@ class CalibrationData:
         return -self.rot_ref_sensor_gt.T @ self.tr_ref_sensor_gt
 
     @property
-    def tf_local(self):
-        return (self.rot_sensor_gt, self.tr_sensor_gt)
+    def tf_gs_local(self):
+        assert self.rot_sensor_gt is not None
+        assert self.tr_sensor_gt is not None
+        rot = self.rot_sensor_gt.T
+        trans = -rot @ self.tr_sensor_gt
+        return (rot, trans)
 
     @property
     def tf_world(self):

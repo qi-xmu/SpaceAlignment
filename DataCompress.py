@@ -17,6 +17,7 @@ import os
 from pathlib import Path
 
 from base.action import dataset_action, dataset_action_pa
+from base.args_parser import DatasetArgsParser
 from base.datatype import ARCoreData, IMUData, NavioDataset, RTABData, UnitData
 
 """
@@ -170,21 +171,32 @@ def move_dir(src: Path, dst: Path) -> None:
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Compress data")
-    parser.add_argument("-d", "--dataset", help="Path to the dataset file")
-    parser.add_argument("-o", "--output", help="Path to the output file")
-    parser.add_argument("-r", "--regen", action="store_true", help="Regenerate data")
-    parser.add_argument("-t", "--type", choices=["navio", "ruijie"], default="navio")
-    args = parser.parse_args()
+    args = DatasetArgsParser()
+    args.parser.add_argument(
+        "-t", "--type", choices=["navio", "ruijie"], default="navio"
+    )
+    args.parse()
+    assert args.output is not None
+
+    if args.dataset is None:
+        assert args.unit is not None
+        ud = UnitData(args.unit)
+        ud = CompressUnitData.from_unit(ud)
+        tg = Target(args.output)
+        ud.compress(tg, regen=True)
+        exit()
+
+    assert args.dataset is not None
     dataset_path = Path(args.dataset)
     output_path = Path(args.output)
+    type = args.args.type
     regen = args.regen
 
     if not output_path.exists():
         output_path.mkdir(parents=True)
 
     DatasetDicts = {"ruijie": RuijieDataset, "navio": NavioDataset}
-    ds = DatasetDicts[args.type](dataset_path)
+    ds = DatasetDicts[type](dataset_path)
     tg = Target(output_path)
 
     def action(ud: UnitData):

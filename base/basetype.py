@@ -42,7 +42,7 @@ class Transform:
         return cls(Rotation.identity(), np.zeros(3))
 
     def inverse(self):
-        return Transform(self.rot.inv(), -self.rot.apply(self.tran))
+        return Transform(self.rot.inv(), -self.rot.inv().apply(self.tran))
 
 
 @dataclass

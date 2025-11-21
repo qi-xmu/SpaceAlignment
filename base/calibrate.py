@@ -200,10 +200,7 @@ def calibrate_pose_series(
         cd_ic = _calibrate_b1_b2(cs1=cs_i, cs2=cs_c, rot_only=True)
         cd_sg = copy(cd_cg)
         assert cd_ic.tf_global is not None
-        # cd_sg.tf_global = cd_ic.tf_global * cd_cg.tf_global
-        cd_sg.tf_global.rot = cd_ic.tf_global.rot * cd_cg.tf_global.rot
-        cd_sg.tf_global.tran = cd_ic.tf_global.tran * cd_cg.tf_global.tran
-
+        cd_sg.tf_global = cd_ic.tf_global * cd_cg.tf_global
         return cd_sg, cd_ic
     else:
         cd = _calibrate_b1_b2(cs1=cs_i, cs2=cs_g, rot_only=True)

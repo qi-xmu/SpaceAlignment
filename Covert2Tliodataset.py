@@ -9,7 +9,7 @@ import numpy as np
 import pandas as pd
 
 from base import load_calibration_data
-from base.action import dataset_action
+from base.action import dataset_action, dataset_action_pa
 from base.args_parser import DatasetArgsParser
 from base.datatype import (
     IMUData,
@@ -151,7 +151,7 @@ if __name__ == "__main__":
         )
         t_len_all_s += t_len_s
 
-    res = dataset_action(ds, action)
+    res = dataset_action_pa(ds, action)
 
     if len(res) > 0:
         print("Error occurred during conversion:")

@@ -50,12 +50,13 @@ JSON_TEMP = {
 
 class TargetPaths:
     def __init__(self, target_root: Path) -> None:
-        target_root.mkdir(parents=True, exist_ok=True)
-
         self.target_root = target_root
         self.csv_file = target_root / "imu_samples0.csv"
         self.npy_file = target_root / "imu0_resampled.npy"
         self.json_file = target_root / "imu0_resampled_description.json"
+
+    def mkdir(self):
+        self.target_root.mkdir(parents=True, exist_ok=True)
 
 
 def UnitCovert(
@@ -71,15 +72,14 @@ def UnitCovert(
     cd = load_calibration_data(unit=unit)
 
     # 使用csv存储原始数据
-    if not target_path.csv_file.exists():
-        imu_samples = pd.DataFrame()
-        imu_samples[TLIO.t] = imu_data.t_sys_us
-        imu_samples[TLIO.c] = np.zeros_like(imu_data.t_us)
-        imu_samples[TLIO.w] = imu_data.gyro
-        imu_samples[TLIO.a] = imu_data.acce
-        imu_samples.to_csv(target_path.csv_file, index=False)
+    # if not target_path.csv_file.exists() or regen:
+    #     imu_samples = pd.DataFrame()
+    #     imu_samples[TLIO.t] = imu_data.t_sys_us
+    #     imu_samples[TLIO.c] = np.zeros_like(imu_data.t_us)
+    #     imu_samples[TLIO.w] = imu_data.gyro
+    #     imu_samples[TLIO.a] = imu_data.acce
+    #     imu_samples.to_csv(target_path.csv_file, index=False, float_format="%.8f")
 
-    # TODO  计算 IMU 旋转到全局坐标系下的数值，以及真值对齐到 IMU 的旋转矩阵 T_WI.
     if not target_path.npy_file.exists() or regen:
         # 真值空间变换
         cs_g = gt_data.get_time_pose_series()
@@ -94,7 +94,7 @@ def UnitCovert(
         t_us = get_time_series([gt_data.t_sys_us, imu_data.t_sys_us], rate=rate)
         cs_g = cs_g.interpolate(t_us)
         imu_data.interpolate(t_us)
-        imu_data.transform_to_world()
+        imu_data.transform_to_world(rots=cs_g.rots)
 
         # 数据存储 quaternion形式 xyzw
         qs = cs_g.rots.as_quat()
@@ -106,7 +106,11 @@ def UnitCovert(
 
         # 拼接
         t_us = t_us.reshape(-1, 1)
-        imu0_resampled = np.hstack([t_us, imu_data.gyro, imu_data.acce, qs, ps, vs])
+
+        imu0_resampled = np.hstack(
+            [t_us, imu_data.world_gyro, imu_data.world_acce, qs, ps, vs]
+        )
+        target_path.mkdir()
         np.save(target_path.npy_file, imu0_resampled)
 
         # 生成 JSON 文件
@@ -125,17 +129,13 @@ def UnitCovert(
 
 if __name__ == "__main__":
     args = DatasetArgsParser().parse()
-    assert args.dataset is not None, "Dataset path is required"
     assert args.output is not None, "Output path is required"
-    dataset_path = Path(args.dataset)
     output_path = Path(args.output)
     regen = args.regen
+    t_len_all_s = 0.0
 
     if not output_path.exists():
         output_path.mkdir(parents=True)
-
-    ds = NavioDataset(dataset_path)
-    t_len_all_s = 0.0
 
     def action(ud: UnitData):
         global t_len_all_s
@@ -144,11 +144,18 @@ if __name__ == "__main__":
         )
         t_len_all_s += t_len_s
 
-    res = dataset_action(ds, action)
+    if args.unit:
+        unit = UnitData(Path(args.unit))
+        action(unit)
 
-    if len(res) > 0:
-        print("Error occurred during conversion:")
-        for item in res:
-            print(f"{item[0]}: {item[1]}")
+    if args.dataset:
+        dataset_path = Path(args.dataset)
+
+        ds = NavioDataset(dataset_path)
+        res = dataset_action(ds, action)
+        if len(res) > 0:
+            print("Error occurred during conversion:")
+            for item in res:
+                print(f"{item[0]}: {item[1]}")
 
     print(f"Done， 数据集总时间： {t_len_all_s / 60:.2f}分钟")

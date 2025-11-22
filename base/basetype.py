@@ -50,6 +50,9 @@ class PoseSeries:
     rots: Rotation
     trans: NDArray
 
+    def inverse(self):
+        return PoseSeries(self.rots.inv(), -self.rots.inv().apply(self.trans))
+
     def __len__(self):
         return len(self.rots)
 

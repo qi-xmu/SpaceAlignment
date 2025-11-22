@@ -181,11 +181,10 @@ class TimePoseSeries:
         return len(self.t_us)
 
     def get_all(self, *, inverse=False) -> PoseSeries:
+        poses = PoseSeries(self.rots, self.trans)
         if inverse:
-            rots = self.rots.inv()
-            trans = -rots.apply(self.trans)
-            return PoseSeries(rots, trans)
-        return PoseSeries(self.rots, self.trans)
+            poses = poses.inverse()
+        return poses
 
     def interpolate(self, t_new_us: Time):
         rots = slerp_rotation(self.rots, t_old_us=self.t_us, t_new_us=t_new_us)
@@ -231,8 +230,8 @@ class CalibrationData:
             return cls(tf_sg_local, tf_sg_global)
 
     def to_json(self, json_path: Path, notes_ext: str = ""):
-        rot_sensor_gt = self.tf_global.rot.as_matrix().tolist()
-        tr_sensor_gt = self.tf_global.tran.tolist()
+        rot_sensor_gt = self.tf_local.rot.as_matrix().tolist()
+        tr_sensor_gt = self.tf_local.tran.tolist()
         rot_ref_sensor_gt = self.tf_global.rot.as_matrix().tolist()
         tr_ref_sensor_gt = self.tf_global.tran.tolist()
 
@@ -276,8 +275,8 @@ class IMUData:
     t_us_f0: Time
     t_sys_us: Time
     raw_ahrs: NDArray
-    acce: NDArray
     gyro: NDArray
+    acce: NDArray
     rate: float
     ahrs_rots: Rotation
 
@@ -353,11 +352,11 @@ class IMUData:
         )
 
     def interpolate(self, t_new_us: NDArray):
-        self.acce = interpolate_vector3d(
-            vec3d=self.acce, t_old_us=self.t_sys_us, t_new_us=t_new_us
-        )
         self.gyro = interpolate_vector3d(
             vec3d=self.gyro, t_old_us=self.t_sys_us, t_new_us=t_new_us
+        )
+        self.acce = interpolate_vector3d(
+            vec3d=self.acce, t_old_us=self.t_sys_us, t_new_us=t_new_us
         )
         self.ahrs_rots = slerp_rotation(self.ahrs_rots, self.t_sys_us, t_new_us)
         self.t_sys_us = t_new_us

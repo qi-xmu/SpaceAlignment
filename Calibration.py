@@ -37,7 +37,7 @@ def main():
 
     if args.unit is not None:
         ud = UnitData(args.unit)
-        calibrate_unit(ud)
+        calibrate_unit(ud, no_group=True)
     elif args.group is not None:
         calibrate_group(args.group)
     elif args.dataset is not None:

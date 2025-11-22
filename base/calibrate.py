@@ -179,8 +179,8 @@ def calibrate_evaluate(
         rot_errors.append(deg)
         trans_errors.append(trans)
 
-    meas_err = np.mean(rot_errors), np.mean(trans_errors)
-    max_err = np.max(rot_errors), np.max(trans_errors)
+    meas_err = float(np.mean(rot_errors)), float(np.mean(trans_errors))
+    max_err = float(np.max(rot_errors)), float(np.max(trans_errors))
 
     print("平均误差 旋转（度）/ 平移（米）: {:.5f} / {:.5f}".format(*meas_err))
     print("最大误差 旋转（度）/ 平移（米）: {:.5f} / {:.5f}".format(*max_err))

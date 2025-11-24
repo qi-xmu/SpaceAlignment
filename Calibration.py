@@ -32,12 +32,16 @@ def calibrate_dataset(path: Path | str, regen: bool = False):
 
 def main():
     # 读取命令行
-    args = DatasetArgsParser().parse()
+    args = DatasetArgsParser()
+    args.parser.add_argument(
+        "--no_using_cam", action="store_true", help="标定时不使用相机数据"
+    )
+    args.parse()
     regen = args.regen
 
     if args.unit is not None:
         ud = UnitData(args.unit)
-        calibrate_unit(ud, no_group=True)
+        calibrate_unit(ud, no_group=True, using_cam=not args.args.no_using_cam)
     elif args.group is not None:
         calibrate_group(args.group)
     elif args.dataset is not None:

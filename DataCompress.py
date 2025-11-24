@@ -86,13 +86,13 @@ class CompressUnitData(UnitData):
         if self.err_msg:
             return
         t_base_us = 0
-        unit_path, new_imu_path, new_cam_path, new_gt_path = target.unit(
+        target_unit_path, new_imu_path, new_cam_path, new_gt_path = target.unit(
             self.data_id, self.device_name
         )
 
         if not new_imu_path.exists() or regen:
             gt_data = RTABData(self.gt_path, is_load_opt=is_load_opt)
-            unit_path.mkdir(parents=True, exist_ok=True)
+            target_unit_path.mkdir(parents=True, exist_ok=True)
             gt_data.save_csv(new_gt_path)
         else:
             gt_data = RTABData(new_gt_path)
@@ -110,11 +110,17 @@ class CompressUnitData(UnitData):
         assert self.calibr_path.exists(), (
             f"Calibration file not found: {self.calibr_path}"
         )
-        new_calibr_path = unit_path / "Calibration.json"
+        new_calibr_path = target_unit_path / "Calibration.json"
         if not new_calibr_path.exists():
             self.copy_file(self.calibr_path, new_calibr_path)
 
-        return unit_path
+        # 复制其他文件
+        other_files = ["DataCheck.json", "TimeDiff.png", "Trajectory.png"]
+        for file_name in other_files:
+            file = self.base_dir / file_name
+            self.copy_file(file, target_unit_path / file_name)
+
+        return target_unit_path
 
     def compress_catch(self, target: Target, *, regen: bool = False):
         try:
@@ -202,7 +208,7 @@ if __name__ == "__main__":
         ud = CompressUnitData.from_unit(ud)
         ud.compress(tg, regen=regen)
 
-    res = dataset_action_pa(ds, action)
+    res = dataset_action(ds, action)
 
     if len(res):
         print("错误数据：")

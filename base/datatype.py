@@ -745,7 +745,7 @@ class RTABData:
         except ImportError:
             print("matplotlib is required for drawing the trajectory.")
 
-    def save_csv(self, path: str | Path):
+    def save_csv(self, path: str | Path, using_opt: bool = False):
         # #timestamp [us],p_RS_R_x [m],p_RS_R_y [m],p_RS_R_z [m],q_RS_w [],q_RS_x [],q_RS_y [],q_RS_z [],
         header = [
             "#timestamp [us]",
@@ -756,22 +756,17 @@ class RTABData:
             "q_RN_x []",
             "q_RN_y []",
             "q_RN_z []",
-            # "p_RO_x [m]",
-            # "p_RO_y [m]",
-            # "p_RO_z [m]",
-            # "q_RO_w []",
-            # "q_RO_x []",
-            # "q_RO_y []",
-            # "q_RO_z []",
         ]
+
+        t_us = self.node_t_us if not using_opt else self.opt_t_us
+        ps = self.node_ps if not using_opt else self.opt_ps
+        rots = self.node_rots if not using_opt else self.opt_rots
 
         data = np.concatenate(
             [
-                self.t_sys_us.reshape(-1, 1),
-                self.node_ps,
-                self.node_rots.as_quat(scalar_first=True),
-                # self.opt_ps,
-                # np.array([q.elements for q in self.opt_qs])
+                t_us.reshape(-1, 1),
+                ps,
+                rots.as_quat(scalar_first=True),
             ],
             axis=1,
         )

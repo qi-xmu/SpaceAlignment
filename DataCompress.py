@@ -80,8 +80,8 @@ class CompressUnitData(UnitData):
         *,
         regen: bool = False,
         using_cam: bool = True,
+        using_opt: bool = False,
         is_z_up: bool = False,
-        is_load_opt: bool = False,
     ):
         if self.err_msg:
             return
@@ -91,9 +91,9 @@ class CompressUnitData(UnitData):
         )
 
         if not new_imu_path.exists() or regen:
-            gt_data = RTABData(self.gt_path, is_load_opt=is_load_opt)
+            gt_data = RTABData(self.gt_path, is_load_opt=using_opt)
             target_unit_path.mkdir(parents=True, exist_ok=True)
-            gt_data.save_csv(new_gt_path)
+            gt_data.save_csv(new_gt_path, using_opt=using_opt)
         else:
             gt_data = RTABData(new_gt_path)
         t_base_us = gt_data.t_sys_us[0]
@@ -180,37 +180,34 @@ if __name__ == "__main__":
     args.parser.add_argument(
         "-t", "--type", choices=["navio", "ruijie"], default="navio"
     )
+    args.parser.add_argument("-z", "--z_up", action="store_true", help="Z-UP坐标系")
+    args.parser.add_argument("--opt", action="store_true", help="使用优化后的数据")
     args.parse()
     assert args.output is not None
-
-    if args.dataset is None:
-        assert args.unit is not None
-        ud = UnitData(args.unit)
-        ud = CompressUnitData.from_unit(ud)
-        tg = Target(args.output)
-        ud.compress(tg, regen=True)
-        exit()
-
-    assert args.dataset is not None
-    dataset_path = Path(args.dataset)
-    output_path = Path(args.output)
     type = args.args.type
     regen = args.regen
+    output_path = Path(args.output)
 
     if not output_path.exists():
         output_path.mkdir(parents=True)
 
-    DatasetDicts = {"ruijie": RuijieDataset, "navio": NavioDataset}
-    ds = DatasetDicts[type](dataset_path)
     tg = Target(output_path)
 
     def action(ud: UnitData):
         ud = CompressUnitData.from_unit(ud)
         ud.compress(tg, regen=regen)
 
-    res = dataset_action(ds, action)
+    if args.unit is not None:
+        assert args.unit is not None
+        ud = UnitData(args.unit)
+        action(ud)
+    elif args.dataset is not None:
+        assert args.dataset is not None
+        DatasetDicts = {"ruijie": RuijieDataset, "navio": NavioDataset}
+        ds = DatasetDicts[type](args.dataset)
+        res = dataset_action(ds, action)
 
-    if len(res):
-        print("错误数据：")
-        for path, err in res:
-            print(f"{path}\n{err}")
+        if len(res):
+            print("错误数据：")
+            for path, err in res:
+                print(f"{path}\n{err}")

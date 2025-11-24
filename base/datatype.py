@@ -105,6 +105,7 @@ class GroupData(Dataset):
     group_id: str
     scene_type: SceneType
     units: list[UnitData]
+    calib_units: list[UnitData]
     # calibr_files: dict[str, Path]
 
     def __init__(self, base_dir: Path | str):
@@ -115,10 +116,10 @@ class GroupData(Dataset):
         self.units = []
 
         self.calibr_dir = base_dir.joinpath("Calibration")
-        for item in base_dir.iterdir():
-            if item.is_dir():
-                if item.name.startswith(ymd):
-                    self.units.append(UnitData(item))
+        self.calib_units = [
+            UnitData(path) for path in self.calibr_dir.iterdir() if path.is_dir()
+        ]
+        self.units = [UnitData(path) for path in base_dir.iterdir() if path.is_dir()]
 
     def flatten(self) -> list[UnitData]:
         return self.units

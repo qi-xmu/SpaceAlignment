@@ -35,7 +35,7 @@ def main():
         action(ud)
     elif args.group is not None:
         gp = GroupData(args.group)
-        for unit in gp.units:
+        for unit in gp.calib_units:
             action(unit)
     elif args.dataset is not None:
         ds = NavioDataset(args.dataset)

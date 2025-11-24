@@ -52,11 +52,11 @@ class UnitData:
             self.group_path = self.group_path.parent
 
         # 标定文件
-        self.unit_calib_file = self.base_dir.joinpath("Calibration.json")
-        calibr_file = self.group_path.joinpath(self._CALIBR_FILE.format(device_name))
-        if not calibr_file.exists():
-            calibr_file = self.unit_calib_file
-        self.calibr_path = calibr_file
+        self.unit_calib_path = self.base_dir.joinpath("Calibration.json")
+        self.group_calibr_path = self.group_path.joinpath(
+            self._CALIBR_FILE.format(device_name)
+        )
+        self.calibr_path = self.unit_calib_path
         self.is_z_up = False
 
         # 使用包含 cam 数据

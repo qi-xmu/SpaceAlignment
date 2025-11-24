@@ -5,28 +5,10 @@
 一般来说，数据量越多，标定结果越准确。
 """
 
-from pathlib import Path
-
 from base.action import dataset_action
 from base.args_parser import DatasetArgsParser
-from base.calibrate import calibrate_group, calibrate_unit
-from base.datatype import NavioDataset, UnitData
-
-
-def calibrate_dataset(path: Path | str, regen: bool = False):
-    path = Path(path)
-    ds = NavioDataset(path)
-
-    def action(ud: UnitData):
-        if regen or not ud.calibr_path.exists():
-            calibrate_unit(ud, using_rerun=False)
-
-    res = dataset_action(ds, action)
-
-    if len(res) > 0:
-        print("标定失败：")
-        for base_dir, error in res:
-            print(f"{base_dir}: {error}")
+from base.calibrate import calibrate_unit
+from base.datatype import GroupData, NavioDataset, UnitData
 
 
 def main():
@@ -38,13 +20,27 @@ def main():
     args.parse()
     regen = args.regen
 
+    def action(ud: UnitData):
+        if regen or not ud.calibr_path.exists():
+            calibrate_unit(
+                ud, using_rerun=args.visual, using_cam=not args.args.no_using_cam
+            )
+
     if args.unit is not None:
         ud = UnitData(args.unit)
-        calibrate_unit(ud, no_group=True, using_cam=not args.args.no_using_cam)
+        args.visual = True  # 单数据默认为真
+        action(ud)
     elif args.group is not None:
-        calibrate_group(args.group)
+        gp = GroupData(args.group)
+        for unit in gp.units:
+            action(unit)
     elif args.dataset is not None:
-        calibrate_dataset(args.dataset, regen=regen)
+        ds = NavioDataset(args.dataset)
+        res = dataset_action(ds, action)
+        if len(res) > 0:
+            print("标定失败：")
+            for base_dir, error in res:
+                print(f"{base_dir}: {error}")
 
 
 if __name__ == "__main__":

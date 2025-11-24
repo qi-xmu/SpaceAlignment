@@ -250,14 +250,8 @@ def calibrate_unit(
 
     save_path = ud.calibr_path
     if no_group:
-        save_path = ud.unit_calib_file
+        save_path = ud.unit_calib_path
     cd.to_json(save_path, notes)
     if using_rerun:
         rr.save(ud.target("data.rrd"))
     return cd
-
-
-def calibrate_group(path):
-    gp = GroupData(path)
-    for unit in gp.units:
-        calibrate_unit(unit)

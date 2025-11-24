@@ -107,12 +107,12 @@ class CompressUnitData(UnitData):
             cam_data.save_csv(new_cam_path)
 
         # 复制标定文件
-        assert self.calibr_path.exists(), (
-            f"Calibration file not found: {self.calibr_path}"
+        assert self.group_calibr_path.exists(), (
+            f"Calibration file not found: {self.group_calibr_path}"
         )
         new_calibr_path = target_unit_path / "Calibration.json"
         if not new_calibr_path.exists():
-            self.copy_file(self.calibr_path, new_calibr_path)
+            self.copy_file(self.group_calibr_path, new_calibr_path)
 
         # 复制其他文件
         other_files = ["DataCheck.json", "TimeDiff.png", "Trajectory.png"]

@@ -63,7 +63,11 @@ class DataChecker:
         cs2 = self.gt_data.get_time_pose_series()
 
         t21_us = match_correlation(
-            cs1, cs2, show=self.is_visual, save_path=self.ud.target("TimeDiff.png")
+            cs1,
+            cs2,
+            time_range=(0, 100),
+            show=self.is_visual,
+            save_path=self.ud.target("TimeDiff.png"),
         )
         res["time_diff_21_us"] = t21_us
         res["note"] = "检测两个序列的时间偏移"

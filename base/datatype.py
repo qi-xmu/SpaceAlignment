@@ -43,6 +43,8 @@ class UnitData:
         self.imu_path = self.base_dir.joinpath("imu.csv")
         self.gt_path = self._load_gt_path()
 
+        self.check_file = self.base_dir / "DataCheck.json"
+
         # 获取 组 名称
         self.group_path = self.base_dir.parent
         self.is_calibr_data = "/Calibration" in str(self.base_dir)

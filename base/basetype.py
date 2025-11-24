@@ -1,5 +1,7 @@
+import json
 from dataclasses import dataclass
-from typing import Literal, NamedTuple, Self
+from pathlib import Path
+from typing import Literal, Self
 
 import numpy as np
 from numpy.typing import NDArray
@@ -61,3 +63,18 @@ class PoseSeries:
 
     def reset_trans(self):
         self.trans = np.zeros((len(self.rots), 3))
+
+
+@dataclass
+class DataCheck:
+    t_gi_us: int
+
+    @staticmethod
+    def from_json(path: Path):
+        with open(path, "r") as f:
+            data = json.load(f)
+            assert "check_time_diff" in data
+            check_time_diff = data["check_time_diff"]
+            assert "time_diff_21_us" in check_time_diff
+            t_gi_us = check_time_diff["time_diff_21_us"]
+            return DataCheck(t_gi_us)

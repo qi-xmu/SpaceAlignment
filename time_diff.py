@@ -32,7 +32,7 @@ def match_correlation(
     cs1: TimePoseSeries,
     cs2: TimePoseSeries,
     *,
-    time_range=(1, 20),
+    time_range=(0, 50),
     resolution=100,
     save_path: Path | None = None,
     show=False,
@@ -58,9 +58,10 @@ def match_correlation(
     if save_path or show:
         fig = plt.figure()
         ax = fig.add_subplot(111)
+        t_new_us = t_new_us - t_new_us[0]
         ax.set_title("Best Time Offset: {:.3f}s".format(t21_us * 1e-6))
-        ax.plot(t_new_us - t21_us, seq1, label="Seq1", alpha=0.5)
-        ax.plot(t_new_us, seq2, label="Seq2", alpha=0.5)
+        ax.plot(t_new_us / 1e6, seq1, label="Seq1", alpha=0.5)
+        ax.plot((t_new_us + t21_us) / 1e6, seq2, label="Seq2", alpha=0.5)
         ax.set_xlabel("Time (s)")
         ax.set_ylabel("Angular Velocity (rad/s)")
         ax.legend()

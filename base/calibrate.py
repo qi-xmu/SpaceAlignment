@@ -6,9 +6,8 @@ import rerun as rr
 from numpy._typing import NDArray
 
 import rerun_ext.rerun_calibration as rrec
-from base.basetype import PoseSeries, Transform
+from base.basetype import DataCheck, PoseSeries, Transform
 from base.interpolate import get_time_series
-from time_diff import match_correlation
 
 from .datatype import (
     ARCoreData,
@@ -218,10 +217,11 @@ def calibrate_unit(
     imu_data = IMUData(ud.imu_path)
     gt_data = RTABData(ud.gt_path)
 
-    cs_i = imu_data.get_time_pose_series(t_len_s)
+    dc = DataCheck.from_json(ud.check_file)
     cs_g = gt_data.get_time_pose_series(t_len_s)
-    t21_us = match_correlation(cs_i, cs_g)
-    cs_g.t_us += t21_us
+    # FIX : 从文件中读取时间差
+    cs_i = imu_data.get_time_pose_series(t_len_s)
+    cs_g.t_us += dc.t_gi_us
 
     if ud.using_cam:
         print("Using Camera for calibration")
@@ -232,6 +232,7 @@ def calibrate_unit(
         cd, cd_ic = calibrate_pose_series(cs_i=cs_i, cs_g=cs_g, cs_c=cs_c)
         if using_rerun:
             rrec.rerun_init(ud.data_id)
+            # FIX Use GT
             imu_data.transform_to_world()
             rrec.send_imu_cam_data(imu_data, cam_data, cd_ic)
             rrec.send_gt_data(gt_data, cd)
@@ -241,6 +242,8 @@ def calibrate_unit(
         notes = "未使用相机，为标定位移"
         if using_rerun:
             rrec.rerun_init(ud.data_id)
+            # FIX Use GT
+            imu_data.transform_to_world()
             rrec.send_imu_cam_data(imu_data)
             rrec.send_gt_data(gt_data, cd)
 

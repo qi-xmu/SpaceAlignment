@@ -6,7 +6,6 @@ import json
 from pathlib import Path
 
 import numpy as np
-import pandas as pd
 
 from base import load_calibration_data
 from base.action import dataset_action, dataset_action_pa  # noqa

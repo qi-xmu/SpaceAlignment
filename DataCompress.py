@@ -195,7 +195,7 @@ if __name__ == "__main__":
 
     def action(ud: UnitData):
         ud = CompressUnitData.from_unit(ud)
-        ud.compress(tg, regen=regen)
+        ud.compress(tg, regen=regen, is_z_up=args.args.z_up, using_opt=args.args.opt)
 
     if args.unit is not None:
         assert args.unit is not None

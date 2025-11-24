@@ -177,11 +177,10 @@ def move_dir(src: Path, dst: Path) -> None:
 
 if __name__ == "__main__":
     args = DatasetArgsParser()
+    args.parser.add_argument("--opt", action="store_true", help="使用优化后的数据")
     args.parser.add_argument(
         "-t", "--type", choices=["navio", "ruijie"], default="navio"
     )
-    args.parser.add_argument("-z", "--z_up", action="store_true", help="Z-UP坐标系")
-    args.parser.add_argument("--opt", action="store_true", help="使用优化后的数据")
     args.parse()
     assert args.output is not None
     type = args.args.type
@@ -195,7 +194,7 @@ if __name__ == "__main__":
 
     def action(ud: UnitData):
         ud = CompressUnitData.from_unit(ud)
-        ud.compress(tg, regen=regen, is_z_up=args.args.z_up, using_opt=args.args.opt)
+        ud.compress(tg, regen=regen, is_z_up=args.z_up, using_opt=args.args.opt)
 
     if args.unit is not None:
         assert args.unit is not None

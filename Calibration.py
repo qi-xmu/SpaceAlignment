@@ -23,7 +23,10 @@ def main():
     def action(ud: UnitData):
         if regen or not ud.calibr_path.exists():
             calibrate_unit(
-                ud, using_rerun=args.visual, using_cam=not args.args.no_using_cam
+                ud,
+                using_rerun=args.visual,
+                using_cam=not args.args.no_using_cam,
+                z_up=args.z_up,
             )
 
     if args.unit is not None:

@@ -25,12 +25,13 @@ class DataChecker:
         *,
         is_visual: bool = True,
         time_range: tuple[float, float] = (0, 50),
+        z_up: bool = False,
     ):
         self.ud = ud
         self.imu_data = IMUData(ud.imu_path)
         self.gt_data = RTABData(ud.gt_path)
         if self.ud.using_cam:
-            self.cam_data = ARCoreData(ud.cam_path)
+            self.cam_data = ARCoreData(ud.cam_path, z_up=z_up)
 
         self.is_visual = is_visual
         self.time_range = time_range
@@ -124,7 +125,9 @@ if __name__ == "__main__":
     visual = args.visual
 
     def action(ud):
-        DataChecker(ud, is_visual=visual, time_range=time_range).run_checks()
+        DataChecker(
+            ud, is_visual=visual, time_range=time_range, z_up=args.z_up
+        ).run_checks()
         if visual:
             plt.show()
 

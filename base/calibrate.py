@@ -213,6 +213,7 @@ def calibrate_unit(
     t_len_s=30,
     using_rerun: bool = True,
     using_cam: bool = True,
+    z_up: bool = False,
 ):
     print(f"Calibrating {ud.data_id}")
     imu_data = IMUData(ud.imu_path)
@@ -226,7 +227,7 @@ def calibrate_unit(
 
     if ud.using_cam and using_cam:
         print("Using Camera for calibration")
-        cam_data = ARCoreData(ud.cam_path, z_up=ud.is_z_up)
+        cam_data = ARCoreData(ud.cam_path, z_up=z_up)
         cs_c = cam_data.get_time_pose_series(t_len_s)
         notes = "使用相机"
 

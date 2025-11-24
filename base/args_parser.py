@@ -17,6 +17,7 @@ class DatasetArgsParser:
     # NOTE  Not default parameters
     regen: bool = False
     visual: bool = False
+    z_up: bool = False  # 新数据应该为True
 
     def __init__(self):
         self.parser = argparse.ArgumentParser(description="数据集参数解析")
@@ -26,6 +27,7 @@ class DatasetArgsParser:
         self.parser.add_argument("-o", "--output", type=str, help="输出路径")
         self.parser.add_argument("-r", "--regen", action="store_true", help="重新生成")
         self.parser.add_argument("-v", "--visual", action="store_true", help="可视化")
+        self.parser.add_argument("-z", "--z_up", action="store_true", help="Z-UP坐标系")
 
     def parse(self):
         self.parser.parse_args()

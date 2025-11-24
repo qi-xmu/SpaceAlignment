@@ -71,7 +71,7 @@ class DataCheck:
 
     @staticmethod
     def from_json(path: Path):
-        with open(path, "r") as f:
+        with open(path, "r", encoding="utf-8") as f:
             data = json.load(f)
             assert "check_time_diff" in data
             check_time_diff = data["check_time_diff"]

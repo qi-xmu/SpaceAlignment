@@ -116,7 +116,7 @@ def UnitCovert(
         json_info["num_rows"] = int(imu0_resampled.shape[0])
         json_info["t_start_us"] = float(t_us[0][0])
         json_info["t_end_us"] = float(t_us[-1][0])
-        with open(target_path.json_file, "w") as f:
+        with open(target_path.json_file, "w", encoding="utf-8") as f:
             json.dump(json_info, f, indent=4)
             print(f"Save {json_info}")
 

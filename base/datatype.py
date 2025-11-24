@@ -116,9 +116,10 @@ class GroupData(Dataset):
         self.units = []
 
         self.calibr_dir = base_dir.joinpath("Calibration")
-        self.calib_units = [
-            UnitData(path) for path in self.calibr_dir.iterdir() if path.is_dir()
-        ]
+        if self.calibr_dir.exists():
+            self.calib_units = [
+                UnitData(path) for path in self.calibr_dir.iterdir() if path.is_dir()
+            ]
         self.units = [UnitData(path) for path in base_dir.iterdir() if path.is_dir()]
 
     def flatten(self) -> list[UnitData]:
@@ -217,7 +218,7 @@ class CalibrationData:
 
     @classmethod
     def from_json(cls, path: Path):
-        with open(path, "r") as f:
+        with open(path, "r", encoding="utf-8") as f:
             data = json.load(f)
             if not isinstance(data, list) or len(data) != 1:
                 raise ValueError("Invalid JSON format")
@@ -238,7 +239,7 @@ class CalibrationData:
         rot_ref_sensor_gt = self.tf_global.rot.as_matrix().tolist()
         tr_ref_sensor_gt = self.tf_global.tran.tolist()
 
-        with open(json_path, "w") as f:
+        with open(json_path, "w", encoding="utf-8") as f:
             json.dump(
                 [
                     {

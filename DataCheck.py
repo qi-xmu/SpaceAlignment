@@ -49,7 +49,7 @@ class DataChecker:
         check_json_str = json.dumps(check_list, indent=4, ensure_ascii=False)
         save_path = self.ud.base_dir.joinpath("DataCheck.json")
         save_path.parent.mkdir(parents=True, exist_ok=True)
-        with open(save_path, "w") as f:
+        with open(save_path, "w", encoding="utf-8") as f:
             f.write(check_json_str)
         print(check_json_str)
 

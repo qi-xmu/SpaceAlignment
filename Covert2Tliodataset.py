@@ -10,6 +10,7 @@ import numpy as np
 from base import load_calibration_data
 from base.action import dataset_action, dataset_action_pa  # noqa
 from base.args_parser import DatasetArgsParser
+from base.basetype import DataCheck
 from base.datatype import (
     IMUData,
     NavioDataset,
@@ -17,7 +18,6 @@ from base.datatype import (
     UnitData,
 )
 from base.interpolate import get_time_series
-from time_diff import match_correlation
 
 
 class TLIO:
@@ -84,10 +84,9 @@ def UnitCovert(
         cs_g = gt_data.get_time_pose_series()
         cs_g.transform_local(cd.tf_local.inverse())
 
-        # 计算时间偏差
-        cs_i = imu_data.get_time_pose_series()
-        t_21_us = match_correlation(cs1=cs_i, cs2=cs_g)
-        cs_g.t_us += t_21_us
+        # 从 DataCheck 中读取 时间偏差
+        dc = DataCheck.from_json(unit.check_file)
+        cs_g.t_us += dc.t_gi_us
 
         # 插值并变换IMU数据
         t_us = get_time_series([gt_data.t_sys_us, imu_data.t_sys_us], rate=rate)

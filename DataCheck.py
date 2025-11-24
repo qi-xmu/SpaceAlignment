@@ -19,7 +19,13 @@ from time_diff import match_correlation
 
 
 class DataChecker:
-    def __init__(self, ud: UnitData, *, is_visual: bool = True):
+    def __init__(
+        self,
+        ud: UnitData,
+        *,
+        is_visual: bool = True,
+        time_range: tuple[float, float] = (0, 50),
+    ):
         self.ud = ud
         self.imu_data = IMUData(ud.imu_path)
         self.gt_data = RTABData(ud.gt_path)
@@ -27,6 +33,7 @@ class DataChecker:
             self.cam_data = ARCoreData(ud.cam_path)
 
         self.is_visual = is_visual
+        self.time_range = time_range
 
     def run_checks(self):
         properties = dir(self)
@@ -65,7 +72,7 @@ class DataChecker:
         t21_us = match_correlation(
             cs1,
             cs2,
-            time_range=(0, 100),
+            time_range=self.time_range,
             show=self.is_visual,
             save_path=self.ud.target("TimeDiff.png"),
         )
@@ -104,30 +111,30 @@ class DataChecker:
 
 if __name__ == "__main__":
     # 解析命令行参数，获取数据集路径
-    args = DatasetArgsParser().parse()
+    args = DatasetArgsParser()
+    # time_range
+    args.parser.add_argument(
+        "--time_range", type=float, nargs=2, default=(0, 50), help="时间范围"
+    )
+    args.parse()
     unit_path = args.unit
     group_path = args.group
     dataset_path = args.dataset
+    time_range = args.args.time_range
     visual = args.visual
+
+    def action(ud):
+        DataChecker(ud, is_visual=visual, time_range=time_range).run_checks()
+        if visual:
+            plt.show()
 
     if unit_path:
         ud = UnitData(unit_path)
-        DataChecker(ud, is_visual=visual).run_checks()
-        if visual:
-            plt.show()
+        action(ud)
     elif group_path:
         gd = GroupData(group_path)
-        for ud in gd.units:
-            DataChecker(ud, is_visual=visual).run_checks()
-            if visual:
-                plt.show()
+        dataset_action(gd, action)
     elif dataset_path:
         ds = NavioDataset(dataset_path)
-
-        def action(ud):
-            DataChecker(ud, is_visual=visual).run_checks()
-            if visual:
-                plt.show()
-
         dataset_action(ds, action)
     print("Analysis completed.")

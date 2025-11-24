@@ -95,8 +95,13 @@ class UnitData:
         )
 
 
+class Dataset:
+    def flatten(self) -> list[UnitData]:
+        raise NotImplementedError
+
+
 @dataclass
-class GroupData:
+class GroupData(Dataset):
     group_id: str
     scene_type: SceneType
     units: list[UnitData]
@@ -136,11 +141,6 @@ class PersonData:
         for group in self.groups:
             units.extend(group.flatten())
         return units
-
-
-class Dataset:
-    def flatten(self) -> list[UnitData]:
-        raise NotImplementedError
 
 
 class NavioDataset(Dataset):

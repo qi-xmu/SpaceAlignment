@@ -19,7 +19,6 @@ def calibrate_dataset(path: Path | str, regen: bool = False):
 
     def action(ud: UnitData):
         if regen or not ud.calibr_path.exists():
-            # unit.using_cam = False
             calibrate_unit(ud, using_rerun=False)
 
     res = dataset_action(ds, action)

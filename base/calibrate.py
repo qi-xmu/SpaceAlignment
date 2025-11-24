@@ -12,7 +12,6 @@ from base.interpolate import get_time_series
 from .datatype import (
     ARCoreData,
     CalibrationData,
-    GroupData,
     IMUData,
     RTABData,
     TimePoseSeries,
@@ -249,10 +248,11 @@ def calibrate_unit(
             rrec.send_imu_cam_data(imu_data)
             rrec.send_gt_data(gt_data, cd)
 
-    save_path = ud.calibr_path
-    if no_group:
-        save_path = ud.unit_calib_path
-    cd.to_json(save_path, notes)
+    cd.to_json(ud.unit_calib_path, notes)
+    # 如果是标定组内的数据，还会在组内生成标定文件
+    if ud.is_calibr_data:
+        cd.to_json(ud.group_calibr_path, notes)
+
     if using_rerun:
         rr.save(ud.target("data.rrd"))
     return cd

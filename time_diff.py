@@ -51,7 +51,7 @@ def match_correlation(
     t_new_us = t1
 
     corr = correlate(seq1, seq2, mode="full")
-    lag_arr = np.arange(-len(seq1) + 1, len(seq1))
+    lag_arr = np.arange(-len(seq2) + 1, len(seq1))
     lag = lag_arr[np.argmax(corr)]
     t21_us = lag * (t_new_us[1] - t_new_us[0])
 

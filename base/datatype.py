@@ -47,7 +47,7 @@ class UnitData:
 
         # 获取 组 名称
         self.group_path = self.base_dir.parent
-        self.is_calibr_data = "/Calibration" in str(self.base_dir)
+        self.is_calibr_data = "/Calibration" in self.base_dir.as_posix()
         if self.is_calibr_data:
             self.group_path = self.group_path.parent
 

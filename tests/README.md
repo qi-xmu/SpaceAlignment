@@ -52,7 +52,6 @@ uv run pytest --cov=base --cov-report=html
 
 - `test_basetype.py`: 测试基础数据类型（Transform, PoseSeries, DataCheck）
 - `test_interpolate.py`: 测试插值函数（slerp_rotation, interpolate_vector3d, get_time_series）
-- `test_time_matching.py`: 测试时间匹配功能
 
 ## 编写新测试
 

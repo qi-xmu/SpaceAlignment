@@ -15,7 +15,7 @@ from base.datatype import (
     UnitData,
 )
 from base.interpolate import get_time_series
-from time_diff import match_correlation
+from base.time_diff import match_correlation
 
 
 class DataChecker:

@@ -23,7 +23,6 @@ if __name__ == "__main__":
         with open(ud.unit_calib_path, "w", encoding="utf-8") as f:
             f.write(content)
 
-
     if unit_path:
         ud = UnitData(unit_path)
         action(ud)

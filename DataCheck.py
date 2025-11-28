@@ -1,5 +1,4 @@
 import json
-from copy import copy
 
 import numpy as np
 from matplotlib import pyplot as plt
@@ -14,7 +13,6 @@ from base.datatype import (
     RTABData,
     UnitData,
 )
-from base.interpolate import get_time_series
 from base.time_diff import match_correlation
 
 
@@ -24,7 +22,7 @@ class DataChecker:
         ud: UnitData,
         *,
         is_visual: bool = True,
-        time_range: tuple[float, float] = (0, 50),
+        time_range: tuple[float | None, float | None] = (0, 50),
         regen: bool = False,
         z_up: bool = False,
     ):
@@ -117,15 +115,11 @@ class DataChecker:
 if __name__ == "__main__":
     # 解析命令行参数，获取数据集路径
     args = DatasetArgsParser()
-    # time_range
-    args.parser.add_argument(
-        "--time_range", type=float, nargs=2, default=(0, 50), help="时间范围"
-    )
     args.parse()
     unit_path = args.unit
     group_path = args.group
     dataset_path = args.dataset
-    time_range = args.args.time_range
+    time_range = args.time_range
     visual = args.visual
 
     def action(ud):

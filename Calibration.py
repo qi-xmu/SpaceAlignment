@@ -15,15 +15,16 @@ def main():
     # 读取命令行
     args = DatasetArgsParser()
     args.parser.add_argument(
-        "--time_range", type=float, nargs=2, default=(0, 50), help="时间范围"
-    )
-    args.parser.add_argument(
         "--no_using_cam", action="store_true", help="标定时不使用相机数据"
     )
     args.parser.add_argument("--no_group", action="store_true", help="非组标定")
     args.parse()
     regen = args.regen
-    time_range = args.args.time_range
+    time_range = args.time_range
+    using_cam = not args.args.no_using_cam
+
+    if time_range[0] is None and time_range[1] is None:
+        raise ValueError("时间范围未指定")
 
     def action(ud: UnitData):
         if regen or not ud.calibr_path.exists():
@@ -31,7 +32,7 @@ def main():
                 ud,
                 time_range=time_range,
                 using_rerun=args.visual,
-                using_cam=not args.args.no_using_cam,
+                using_cam=using_cam,
                 z_up=args.z_up,
             )
         else:

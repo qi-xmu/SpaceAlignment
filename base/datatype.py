@@ -67,6 +67,11 @@ class UnitData:
             self.using_cam = False
 
     def _load_gt_path(self):
+        # 优先使用 gt.csv 文件
+        gt_path = self.base_dir / "gt.csv"
+        if gt_path.exists():
+            return gt_path
+
         # 优先使用 rtab.csv 文件
         gt_path = self.base_dir.joinpath("rtab.csv")
         if gt_path.exists():
@@ -261,7 +266,7 @@ class CalibrationData:
 class IMUColumn:
     """
     #timestamp [us],w_RS_S_x [rad s^-1],w_RS_S_y [rad s^-1],w_RS_S_z [rad s^-1],a_RS_S_x [m s^-2],a_RS_S_y [m s^-2],a_RS_S_z [m s^-2],q_RS_w [],q_RS_x [],q_RS_y [],q_RS_z [],t_system [us]
-    #"""
+    """
 
     t = ["#timestamp [us]"]
     w = ["w_RS_S_x [rad s^-1]", "w_RS_S_y [rad s^-1]", "w_RS_S_z [rad s^-1]"]
@@ -326,15 +331,19 @@ class IMUData:
         else:
             print("Warning: Not enough data points to calculate frequency")
 
-    def get_time_pose_series(self, t_len_s: int | None = None) -> TimePoseSeries:
-        max_idx = len(self.t_sys_us)
-        if t_len_s is not None:
-            max_idx = int(min(t_len_s * self.rate, max_idx))
+    def get_time_pose_series(self, time_range: tuple = (None, None)) -> TimePoseSeries:
+        s_idx, e_idx = None, None
+        t_s_s, t_e_s = time_range
+        if t_s_s is not None:
+            s_idx = int(max(0, t_s_s * self.rate))
+
+        if t_e_s is not None:
+            e_idx = int(min(len(self), t_e_s * self.rate))
 
         return TimePoseSeries(
-            t_us=self.t_sys_us[:max_idx],
-            rots=self.ahrs_rots[:max_idx],
-            ps=np.zeros((len(self.t_sys_us[:max_idx]), 3)),
+            t_us=self.t_sys_us[s_idx:e_idx],
+            rots=self.ahrs_rots[s_idx:e_idx],
+            ps=np.zeros((len(self.t_sys_us[s_idx:e_idx]), 3)),
         )
 
     def save_csv(self, path: str | Path):
@@ -343,11 +352,11 @@ class IMUData:
 
         data = np.hstack(
             [
-                self.t_us[:, np.newaxis],
+                self.t_us.reshape(-1, 1),
                 self.gyro,
                 self.acce,
                 self.ahrs_rots.as_quat(scalar_first=True),
-                self.t_sys_us[:, np.newaxis],
+                self.t_sys_us.reshape(-1, 1),
             ]
         )
 
@@ -451,22 +460,17 @@ class ARCoreData:
             self.cam_rots = self.sensor_rots
             self.t_sys_us = self.t_us_f0 + t_base_us
 
-    def get_time_pose_series(
-        self, t_len_s: int | None = None, *, using_cam: bool = False
-    ) -> TimePoseSeries:
-        max_idx = len(self.t_sys_us)
-        if t_len_s is not None:
-            max_idx = min(max_idx, int(t_len_s * 1e6))
-
-        assert len(np.unique(self.t_sys_us)) == len(self.t_sys_us), (
-            "Time stamps are not unique"
-        )
+    def get_time_pose_series(self, time_range: tuple = (None, None)) -> TimePoseSeries:
+        s_idx, e_idx = None, None
+        t_s_s, t_e_s = time_range
+        if t_s_s is not None:
+            s_idx = int(max(0, t_s_s * self.rate))
+        if t_e_s is not None:
+            e_idx = int(min(len(self.t_sys_us), t_e_s * self.rate))
         return TimePoseSeries(
-            t_us=self.t_sys_us[:max_idx],
-            rots=self.sensor_rots[:max_idx]
-            if not using_cam
-            else self.cam_rots[:max_idx],
-            ps=self.sensor_ps[:max_idx] if not using_cam else self.cam_ps[:max_idx],
+            t_us=self.t_sys_us[s_idx:e_idx],
+            rots=self.sensor_rots[s_idx:e_idx],
+            ps=self.sensor_ps[s_idx:e_idx],
         )
 
     def save_csv(self, path: str | Path):
@@ -508,6 +512,10 @@ class ARCoreData:
                 fig.show()
         except Exception as e:
             print(f"Error in drawing ARCore data: {e}")
+
+
+class PosesData:
+    pass
 
 
 class RTABData:
@@ -553,6 +561,9 @@ class RTABData:
         self.t_sys_us = self.node_t_us
         self.rate = float(1e6 / np.mean(np.diff(self.node_t_us)))
         self.t_len_s = (self.node_t_us[-1] - self.node_t_us[0]) / 1e6
+
+    def __len__(self):
+        return len(self.node_t_us)
 
     def load_csv_data(self):
         # #timestamp [us],p_RN_x [m],p_RN_y [m],p_RN_z [m],q_RN_w [],q_RN_x [],q_RN_y [],q_RN_z []
@@ -664,19 +675,26 @@ class RTABData:
         self.node_ps = np.array(node_ps)
 
     def get_time_pose_series(
-        self, t_len_s: int | None = None, *, using_opt: bool = False
+        self, time_range: tuple = (None, None), *, using_opt: bool = False
     ) -> TimePoseSeries:
-        max_idx = len(self.node_t_us)
-        if t_len_s is not None:
-            max_idx = min(max_idx, int(t_len_s * self.rate))
+        s_idx, e_idx = None, None
+        t_s_s, t_e_s = time_range
+        if t_s_s is not None:
+            s_idx = int(max(0, t_s_s * self.rate))
+
+        if t_e_s is not None:
+            e_idx = int(min(len(self), t_e_s * self.rate))
+
         return TimePoseSeries(
-            self.t_sys_us[:max_idx], self.node_rots[:max_idx], self.node_ps[:max_idx]
+            self.t_sys_us[s_idx:e_idx],
+            self.node_rots[s_idx:e_idx],
+            self.node_ps[s_idx:e_idx],
         )
 
     def fix_time(self, t_21_us: int):
         self.node_t_us += t_21_us
         self.t_us_f0 += t_21_us
-        self.opt_t_us += t_21_us
+        self.t_sys_us += t_21_us
 
     def interpolate(self, t_new_us: NDArray):
         self.node_rots = slerp_rotation(

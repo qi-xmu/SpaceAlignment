@@ -11,12 +11,7 @@ from base import load_calibration_data
 from base.action import dataset_action, dataset_action_pa  # noqa
 from base.args_parser import DatasetArgsParser
 from base.basetype import DataCheck
-from base.datatype import (
-    IMUData,
-    NavioDataset,
-    RTABData,
-    UnitData,
-)
+from base.datatype import IMUData, NavioDataset, RTABData, UnitData
 from base.interpolate import get_time_series
 
 

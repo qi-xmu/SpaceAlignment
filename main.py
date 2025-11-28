@@ -1,6 +1,8 @@
+import rerun_ext.rerun_calibration as rrec
 from base.action import dataset_action
 from base.args_parser import DatasetArgsParser
-from base.datatype import GroupData, NavioDataset, UnitData
+from base.basetype import DataCheck
+from base.datatype import GroupData, IMUData, NavioDataset, RTABData, UnitData
 
 if __name__ == "__main__":
     # 解析命令行参数，获取数据集路径
@@ -17,11 +19,16 @@ if __name__ == "__main__":
     visual = args.visual
 
     def action(ud: UnitData):
-        with open(ud.unit_calib_path, "r", encoding="gbk") as f:
-            content = f.read()
-        print(content)
-        with open(ud.unit_calib_path, "w", encoding="utf-8") as f:
-            f.write(content)
+        dc = DataCheck.from_json(ud.check_file)
+        imu_data = IMUData(ud.imu_path)
+        gt_data = RTABData(ud.gt_path)
+        gt_data.fix_time(dc.t_gi_us)
+
+        rrec.rerun_init(ud.data_id)
+        imu_data.world_gyro = imu_data.gyro
+        imu_data.world_acce = imu_data.acce
+        imu_data.transform_to_world()
+        rrec.send_imu_cam_data(imu_data)
 
     if unit_path:
         ud = UnitData(unit_path)

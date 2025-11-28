@@ -119,15 +119,12 @@ def _calibrate_b1_b2(
     cs1: TimePoseSeries,
     cs2: TimePoseSeries,
     *,
-    calibr_data: CalibrationData = CalibrationData.identity(),
     is_body_calc: bool = True,
     is_ref_calc: bool = True,
-    is_t_diff=True,
-    show_t_diff=False,
     rot_only=False,
 ):
     # 插值到相同频率
-    t_new_us = get_time_series([cs1.t_us, cs2.t_us], rate=2)
+    t_new_us = get_time_series([cs1.t_us, cs2.t_us], rate=10)
     cs1 = cs1.interpolate(t_new_us)
     cs2 = cs2.interpolate(t_new_us)
 
@@ -186,30 +183,28 @@ def calibrate_evaluate(
 
 
 def calibrate_pose_series(
-    *,
     cs_i: TimePoseSeries,
     cs_g: TimePoseSeries,
     cs_c: TimePoseSeries | None = None,
 ):
     if cs_c is not None:
         print("------------- 计算 Sensor - GT ")
-        cd_cg = _calibrate_b1_b2(cs1=cs_c, cs2=cs_g, rot_only=False)
+        cd_cg = _calibrate_b1_b2(cs_c, cs_g, rot_only=False)
         print("------------- 计算 AHRS - Sensor")
-        cd_ic = _calibrate_b1_b2(cs1=cs_i, cs2=cs_c, rot_only=True)
+        cd_ic = _calibrate_b1_b2(cs_i, cs_c, rot_only=True)
         cd_sg = copy(cd_cg)
         assert cd_ic.tf_global is not None
         cd_sg.tf_global = cd_ic.tf_global * cd_cg.tf_global
         return cd_sg, cd_ic
     else:
-        cd = _calibrate_b1_b2(cs1=cs_i, cs2=cs_g, rot_only=True)
+        cd = _calibrate_b1_b2(cs_i, cs_g, rot_only=True)
     return cd, CalibrationData.identity()
 
 
 def calibrate_unit(
     ud: UnitData,
     *,
-    no_group=False,
-    t_len_s=30,
+    time_range: tuple = (None, None),
     using_rerun: bool = True,
     using_cam: bool = True,
     z_up: bool = False,
@@ -217,36 +212,35 @@ def calibrate_unit(
     print(f"Calibrating {ud.data_id}")
     imu_data = IMUData(ud.imu_path)
     gt_data = RTABData(ud.gt_path)
-
     dc = DataCheck.from_json(ud.check_file)
-    cs_g = gt_data.get_time_pose_series(t_len_s)
-    # FIX : 从文件中读取时间差
-    cs_i = imu_data.get_time_pose_series(t_len_s)
-    cs_g.t_us += dc.t_gi_us
+    print(f"使用时间差：{dc.t_gi_us}")
+    gt_data.fix_time(dc.t_gi_us)
+
+    cs_g = gt_data.get_time_pose_series(time_range)
+    cs_i = imu_data.get_time_pose_series(time_range)
 
     if ud.using_cam and using_cam:
         print("Using Camera for calibration")
         cam_data = ARCoreData(ud.cam_path, z_up=z_up)
-        cs_c = cam_data.get_time_pose_series(t_len_s)
+        cs_c = cam_data.get_time_pose_series(time_range)
         notes = "使用相机"
 
-        cd, cd_ic = calibrate_pose_series(cs_i=cs_i, cs_g=cs_g, cs_c=cs_c)
+        cd, cd_ic = calibrate_pose_series(cs_i, cs_g, cs_c)
         if using_rerun:
             rrec.rerun_init(ud.data_id)
-            # FIX Use GT
             imu_data.transform_to_world()
             rrec.send_imu_cam_data(imu_data, cam_data, cd_ic)
-            rrec.send_gt_data(gt_data, cd)
+            # rrec.send_gt_data(gt_data, cd)
+            rrec.send_pose_data(cs_g, cd)
     else:
         print("Not using Camera for calibration")
-        cd, _ = calibrate_pose_series(cs_i=cs_i, cs_g=cs_g)
+        cd, _ = calibrate_pose_series(cs_i, cs_g)
         notes = "未使用相机，为标定位移"
         if using_rerun:
             rrec.rerun_init(ud.data_id)
-            # FIX Use GT
             imu_data.transform_to_world()
             rrec.send_imu_cam_data(imu_data)
-            rrec.send_gt_data(gt_data, cd)
+            rrec.send_pose_data(cs_g, cd)
 
     cd.to_json(ud.unit_calib_path, notes)
     # 如果是标定组内的数据，还会在组内生成标定文件

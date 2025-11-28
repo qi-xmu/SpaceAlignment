@@ -1,7 +1,7 @@
 import rerun as rr
 import rerun.blueprint as rrb
 
-from base.datatype import ARCoreData, CalibrationData, IMUData, RTABData
+from base.datatype import ARCoreData, CalibrationData, IMUData, RTABData, TimePoseSeries
 
 from . import log_coordinate, send_columns_path
 
@@ -23,8 +23,8 @@ def rerun_init(name: str):
                 },
                 axis_x=rrb.archetypes.TimeAxis(
                     view_range=rrb.TimeRange(
-                        start=rrb.TimeRangeBoundary.cursor_relative(seconds=-2),
-                        end=rrb.TimeRangeBoundary.cursor_relative(seconds=2),
+                        start=rrb.TimeRangeBoundary.cursor_relative(seconds=-20),
+                        end=rrb.TimeRangeBoundary.cursor_relative(seconds=20),
                     )
                 ),
             ),
@@ -39,8 +39,8 @@ def rerun_init(name: str):
                 },
                 axis_x=rrb.archetypes.TimeAxis(
                     view_range=rrb.TimeRange(
-                        start=rrb.TimeRangeBoundary.cursor_relative(seconds=-2),
-                        end=rrb.TimeRangeBoundary.cursor_relative(seconds=2),
+                        start=rrb.TimeRangeBoundary.cursor_relative(seconds=-20),
+                        end=rrb.TimeRangeBoundary.cursor_relative(seconds=20),
                     )
                 ),
             ),
@@ -52,7 +52,7 @@ def rerun_init(name: str):
             spatial_information=rrb.SpatialInformation(show_axes=True),
             eye_controls=rrb.EyeControls3D(
                 kind="Orbital",
-                tracking_entity="/world/W_TO_GT/groundtruth",
+                tracking_entity="/world/groundtruth/sensor",
             ),
         ),
         column_shares=[0.40, 0.60],
@@ -77,23 +77,20 @@ def send_imu_cam_data(
         indexes=[ts_imu],
         columns=rr.Scalars.columns(scalars=imu_data.world_acce),
     )
-    rr.log(
-        "/world/W_TO_CAM",
-        rr.Transform3D(
-            mat3x3=cd_ic.tf_global.rot.as_matrix(),
-            translation=cd_ic.tf_global.tran,
-        ),
-        static=True,
+
+    qs = imu_data.ahrs_rots.as_quat()
+    rr.send_columns(
+        "/world/ahrs",
+        indexes=[ts_imu],
+        columns=rr.Transform3D.columns(quaternion=qs),
     )
 
     if cam_data:
         ts_cam = rr.TimeColumn("timestamp", timestamp=cam_data.t_sys_us * 1e-6)
-        log_coordinate(
-            "/world/W_TO_CAM/sensor", length=0.1, labels=["Sensor"], show_labels=True
-        )
+        log_coordinate("/world/sensor", length=0.1, labels=["Sensor"], show_labels=True)
         qs = cam_data.sensor_rots.as_quat()
         rr.send_columns(
-            "/world/W_TO_CAM/sensor",
+            "/world/sensor",
             indexes=[ts_cam],
             columns=rr.Transform3D.columns(
                 quaternion=qs, translation=cam_data.sensor_ps
@@ -101,7 +98,7 @@ def send_imu_cam_data(
         )
 
         send_columns_path(
-            "/world/W_TO_CAM/sensor_path",
+            "/world/sensor_path",
             indexes=[ts_cam],
             ps=cam_data.sensor_ps,
             labels=["Sensor"],
@@ -110,8 +107,9 @@ def send_imu_cam_data(
 
 def send_gt_data(gt_data: RTABData, calibr_data: CalibrationData):
     times = rr.TimeColumn("timestamp", timestamp=gt_data.node_t_us * 1e-6)
+
     rr.log(
-        "/world/W_TO_GT",
+        "/world",
         rr.Transform3D(
             mat3x3=calibr_data.tf_global.rot.as_matrix(),
             translation=calibr_data.tf_global.tran,
@@ -119,21 +117,21 @@ def send_gt_data(gt_data: RTABData, calibr_data: CalibrationData):
         static=True,
     )
 
-    log_coordinate(
-        "/world/W_TO_GT/groundtruth",
-        length=0.1,
-        labels=["Groundtruth"],
-        show_labels=True,
-    )
+    log_coordinate("/world/ahrs", length=0.1, show_labels=True, labels=["AHRS"])
     qs = gt_data.node_rots.as_quat()
     rr.send_columns(
-        "/world/W_TO_GT/groundtruth",
+        "/world/groundtruth",
         indexes=[times],
         columns=rr.Transform3D.columns(quaternion=qs, translation=gt_data.node_ps),
     )
+    rr.send_columns(
+        "/world/ahrs",
+        indexes=[times],
+        columns=rr.Transform3D.columns(translation=gt_data.node_ps),
+    )
 
     send_columns_path(
-        "/world/W_TO_GT/gt_path",
+        "/world/gt_path",
         indexes=[times],
         ps=gt_data.node_ps,
         static=True,
@@ -142,7 +140,7 @@ def send_gt_data(gt_data: RTABData, calibr_data: CalibrationData):
     )
 
     log_coordinate(
-        "/world/W_TO_GT/groundtruth/sensor",
+        "/world/groundtruth/sensor",
         length=0.1,
         labels=["Estimate"],
         show_labels=True,
@@ -150,7 +148,51 @@ def send_gt_data(gt_data: RTABData, calibr_data: CalibrationData):
 
     tf_gs_local = calibr_data.tf_local.inverse()
     rr.log(
-        "/world/W_TO_GT/groundtruth/sensor",
+        "/world/groundtruth/sensor",
+        rr.Transform3D(
+            mat3x3=tf_gs_local.rot.as_matrix(), translation=tf_gs_local.tran
+        ),
+        static=True,
+    )
+
+
+def send_pose_data(ts: TimePoseSeries, calibr_data: CalibrationData):
+    times = rr.TimeColumn("timestamp", timestamp=ts.t_us * 1e-6)
+
+    ts.transform_global(calibr_data.tf_global)
+
+    log_coordinate("/world/ahrs", length=0.1, show_labels=True, labels=["AHRS"])
+    qs = ts.rots.as_quat()
+    rr.send_columns(
+        "/world/groundtruth",
+        indexes=[times],
+        columns=rr.Transform3D.columns(quaternion=qs, translation=ts.trans),
+    )
+    rr.send_columns(
+        "/world/ahrs",
+        indexes=[times],
+        columns=rr.Transform3D.columns(translation=ts.trans),
+    )
+
+    send_columns_path(
+        "/world/gt_path",
+        indexes=[times],
+        ps=ts.trans,
+        static=True,
+        labels=["Groundtruth"],
+        colors=[[192, 72, 72]],
+    )
+
+    log_coordinate(
+        "/world/groundtruth/sensor",
+        length=0.1,
+        labels=["Estimate"],
+        show_labels=True,
+    )
+
+    tf_gs_local = calibr_data.tf_local.inverse()
+    rr.log(
+        "/world/groundtruth/sensor",
         rr.Transform3D(
             mat3x3=tf_gs_local.rot.as_matrix(), translation=tf_gs_local.tran
         ),

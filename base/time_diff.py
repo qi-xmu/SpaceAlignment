@@ -39,15 +39,16 @@ def match_correlation(
 ):
     """使用互相关法匹配Rs1和Rs2"""
     # 分辨率不能大于时间序列的采样率，否则没有插值的意义
+    rate = min(cs1.rate, cs2.rate)
     resolution = min(resolution, cs1.rate, cs2.rate)
 
-    t_new_us = get_time_series([cs1.t_us, cs2.t_us], *time_range, rate=resolution)
+    t_new_us = get_time_series([cs1.t_us, cs2.t_us], time_range, rate=rate)
     cs1 = cs1.interpolate(t_new_us)
     cs2 = cs2.interpolate(t_new_us)
     print(f"使用时间范围：{(cs1.t_us[-1] - cs1.t_us[0]) / 1e6} 秒")
 
-    seq1, t1 = get_angvels(cs1.t_us, cs1.rots, step=1)
-    seq2, t2 = get_angvels(cs2.t_us, cs2.rots, step=1)
+    seq1, t1 = get_angvels(cs1.t_us, cs1.rots, step=int(rate / resolution))
+    seq2, t2 = get_angvels(cs2.t_us, cs2.rots, step=int(rate / resolution))
     t_new_us = t1
 
     corr = correlate(seq1, seq2, mode="full")

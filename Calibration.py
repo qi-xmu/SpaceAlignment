@@ -15,19 +15,27 @@ def main():
     # 读取命令行
     args = DatasetArgsParser()
     args.parser.add_argument(
+        "--time_range", type=float, nargs=2, default=(0, 50), help="时间范围"
+    )
+    args.parser.add_argument(
         "--no_using_cam", action="store_true", help="标定时不使用相机数据"
     )
+    args.parser.add_argument("--no_group", action="store_true", help="非组标定")
     args.parse()
     regen = args.regen
+    time_range = args.args.time_range
 
     def action(ud: UnitData):
         if regen or not ud.calibr_path.exists():
             calibrate_unit(
                 ud,
+                time_range=time_range,
                 using_rerun=args.visual,
                 using_cam=not args.args.no_using_cam,
                 z_up=args.z_up,
             )
+        else:
+            print(f"标定结果已存在：{ud.calibr_path}")
 
     if args.unit is not None:
         ud = UnitData(args.unit)
@@ -35,8 +43,12 @@ def main():
         action(ud)
     elif args.group is not None:
         gp = GroupData(args.group)
-        for unit in gp.calib_units:
-            action(unit)
+        if args.args.no_group:
+            for unit in gp.units:
+                action(unit)
+        else:
+            for unit in gp.calib_units:
+                action(unit)
     elif args.dataset is not None:
         ds = NavioDataset(args.dataset)
         res = dataset_action(ds, action)

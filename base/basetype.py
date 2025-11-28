@@ -35,13 +35,13 @@ class Transform:
     def get_raw(self):
         return self.rot.as_matrix(), self.tran
 
-    @classmethod
-    def from_raw(cls, raw_rot: NDArray, trans: NDArray):
-        return cls(Rotation.from_matrix(raw_rot), trans)
+    @staticmethod
+    def from_raw(raw_rot: NDArray, trans: NDArray):
+        return Transform(Rotation.from_matrix(raw_rot), trans)
 
-    @classmethod
-    def identity(cls):
-        return cls(Rotation.identity(), np.zeros(3))
+    @staticmethod
+    def identity():
+        return Transform(Rotation.identity(), np.zeros(3))
 
     def inverse(self):
         return Transform(self.rot.inv(), -self.rot.inv().apply(self.tran))

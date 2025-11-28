@@ -25,9 +25,9 @@ def view_calibration(path: Path | str):
     imu_data = IMUData(fp.imu_path)
     cam_data = ARCoreData(fp.cam_path, z_up=True)
 
-    cs1 = imu_data.get_time_pose_series(int(imu_data.rate * 20))
-    cs2 = gt_data.get_time_pose_series(int(gt_data.rate * 20))
-    cs3 = cam_data.get_time_pose_series(int(cam_data.rate * 20))
+    cs1 = imu_data.get_time_pose_series()
+    cs2 = gt_data.get_time_pose_series()
+    cs3 = cam_data.get_time_pose_series()
     cd, cd_ic = calibrate_pose_series(cs_i=cs1, cs_g=cs2, cs_c=cs3)
 
     imu_data.transform_to_world()

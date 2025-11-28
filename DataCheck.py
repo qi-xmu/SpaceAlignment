@@ -25,6 +25,7 @@ class DataChecker:
         *,
         is_visual: bool = True,
         time_range: tuple[float, float] = (0, 50),
+        regen: bool = False,
         z_up: bool = False,
     ):
         self.ud = ud
@@ -34,9 +35,14 @@ class DataChecker:
             self.cam_data = ARCoreData(ud.cam_path, z_up=z_up)
 
         self.is_visual = is_visual
+        self.regen = regen
         self.time_range = time_range
 
     def run_checks(self):
+        if self.ud.check_file.exists() and not self.regen:
+            print("检查文件已存在")
+            return
+
         properties = dir(self)
         check_method = [method for method in properties if method.startswith("check_")]
         check_list = {
@@ -83,21 +89,19 @@ class DataChecker:
 
     def check_groundtruth_gap(self, *, max_gap_s=None):
         res = {}
-        ts = self.gt_data.node_t_us
+        ts = self.gt_data.t_sys_us
         # 时间差距
         ts_diff = np.diff(ts) * 1e-6
         mean_gap = np.mean(ts_diff)
         max_gap = np.max(ts_diff)
         # 查询 大于 max_gap_s 的 索引的所有下标
-        max_gap_s = (1 / self.gt_data.rate) * 2 if max_gap_s is None else max_gap_s
+        max_gap_s = 1 if max_gap_s is None else max_gap_s
         idxs = np.where(ts_diff > max_gap_s)[0].tolist()
         ts_diff = ts_diff[idxs].tolist()
 
-        t_new_us = get_time_series([self.gt_data.t_sys_us], rate=100)
-        gt_data = copy(self.gt_data)
-        gt_data.interpolate(t_new_us)
+        print(list(zip(idxs, ts_diff)))
 
-        gt_data.draw(
+        self.gt_data.draw(
             mark_idxs=(idxs, ts_diff),
             show=False,
             save_path=self.ud.target("Trajectory.png"),
@@ -126,7 +130,11 @@ if __name__ == "__main__":
 
     def action(ud):
         DataChecker(
-            ud, is_visual=visual, time_range=time_range, z_up=args.z_up
+            ud,
+            is_visual=visual,
+            time_range=time_range,
+            z_up=args.z_up,
+            regen=args.regen,
         ).run_checks()
         if visual:
             plt.show()

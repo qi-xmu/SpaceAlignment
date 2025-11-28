@@ -15,7 +15,9 @@
 #### 检查单个数据集
 
 ```bash
-python DataCheck.py -u dataset/001/20251031_01_in/20251031_101025_SM-G9900
+python DataCheck.py -u dataset/001/20251031_01_in/20251031_101025_SM-G9900 -v --time_range 60 80
+
+uv run DataCheck.py -g "/Users/qi/Codespace/Python/DataProcess/data_preprocess_align/Convert/zzh/2023_SM-G9900_in" -v  --time_range 60 80
 ```
 
 #### 检查整个数据组

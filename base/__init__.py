@@ -13,5 +13,5 @@ def load_calibration_data(
     except Exception as _:
         print("-" * 20, f"标定 {unit.device_name}")
         unit.unit_calib_path = unit.base_dir / "CalibrationTemp.json"
-        cd = calibrate_unit(unit, t_len_s=40, using_rerun=using_rerun)
+        cd = calibrate_unit(unit, time_range=(0, 40), using_rerun=using_rerun)
     return cd

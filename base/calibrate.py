@@ -202,7 +202,7 @@ def calibrate_unit(
     time_range: tuple = (None, None),
     using_rerun: bool = True,
     using_cam: bool = True,
-    z_up: bool = False,
+    z_up: bool = True,
 ):
     print(f"Calibrating {ud.data_id}")
     imu_data = IMUData(ud.imu_path)

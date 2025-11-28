@@ -57,7 +57,7 @@ class UnitData:
             self._CALIBR_FILE.format(device_name)
         )
         self.calibr_path = self.unit_calib_path
-        self.is_z_up = False
+        self.is_z_up = True
 
         # 使用包含 cam 数据
         try:
@@ -273,10 +273,8 @@ class IMUColumn:
     a = ["a_RS_S_x [m s^-2]", "a_RS_S_y [m s^-2]", "a_RS_S_z [m s^-2]"]
     q = ["q_RS_w []", "q_RS_x []", "q_RS_y []", "q_RS_z []"]
     t_sys = ["t_system [us]"]
-
-    all = t + w + a + q + t_sys
-
-    pass
+    m = ["m_RS_S_x [µT]", "m_RS_S_y [µT]", "m_RS_S_z [µT]"]
+    all = t + w + a + q + t_sys + m
 
 
 class IMUData:
@@ -286,6 +284,7 @@ class IMUData:
     raw_ahrs: NDArray
     gyro: NDArray
     acce: NDArray
+    magn: NDArray
     rate: float
     ahrs_rots: Rotation
 
@@ -303,6 +302,7 @@ class IMUData:
         # timestamp [us],w_RS_S_x [rad s^-1],w_RS_S_y [rad s^-1],w_RS_S_z [rad s^-1],
         # a_RS_S_x [m s^-2],a_RS_S_y [m s^-2],a_RS_S_z [m s^-2],
         # q_RS_w [],q_RS_x [],q_RS_y [],q_RS_z []
+        # mag_x [uT],mag_y [uT],mag_z [uT]
         df: pd.DataFrame = pd.read_csv(self.file_path).dropna()
         raw_data = df.to_numpy()
 
@@ -312,24 +312,14 @@ class IMUData:
         self.raw_ahrs = raw_data[:, 7:11]  # orientation wxyz
         self.ahrs_rots = Rotation.from_quat(self.raw_ahrs, scalar_first=True)
 
-        if len(self.t_us) > 1:
-            self.t_us_f0 = self.t_us - self.t_us[0]
-
-        self.extend = bool(raw_data.shape[1] > 11)
-        if self.extend:
-            self.t_sys_us = raw_data[:, 11]  # 1970 us
-            self.t_sys_us = self.t_sys_us[0] + self.t_us_f0
-        else:
-            print("Warning: No system timestamp data available")
-            self.t_sys_us = self.t_us_f0 + t_base_us
+        assert len(self.t_us) > 1
+        self.t_us_f0 = self.t_us - self.t_us[0]
+        self.t_sys_us = raw_data[0, 11] + self.t_us_f0
+        self.magn = raw_data[:, 12:15]
 
         # Calculate IMU frequency
-        if len(self.t_us) > 1:
-            time_diffs = np.diff(self.t_us)
-            self.rate = float(1e6 / np.mean(time_diffs))
-            print(f"IMU frequency: {self.rate:.2f} Hz")
-        else:
-            print("Warning: Not enough data points to calculate frequency")
+        self.rate = float(1e6 / np.mean(np.diff(self.t_us)))
+        print(f"IMU frequency: {self.rate:.2f} Hz")
 
     def get_time_pose_series(self, time_range: tuple = (None, None)) -> TimePoseSeries:
         s_idx, e_idx = None, None
@@ -357,6 +347,7 @@ class IMUData:
                 self.acce,
                 self.ahrs_rots.as_quat(scalar_first=True),
                 self.t_sys_us.reshape(-1, 1),
+                self.magn,
             ]
         )
 
@@ -402,7 +393,7 @@ class ARCoreColumn:
 class ARCoreData:
     rate: float
 
-    def __init__(self, file_path, dataset_id=None, *, z_up=False, t_base_us: int = 0):
+    def __init__(self, file_path, dataset_id=None, *, z_up=True, t_base_us: int = 0):
         self.file_path = file_path
         self.z_up = z_up
 

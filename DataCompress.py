@@ -82,7 +82,7 @@ class CompressUnitData(UnitData):
         regen: bool = False,
         using_cam: bool = True,
         using_opt: bool = False,
-        is_z_up: bool = False,
+        is_z_up: bool = True,
     ):
         if self.err_msg:
             return

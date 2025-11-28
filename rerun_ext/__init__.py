@@ -1,6 +1,8 @@
-import rerun as rr
-import numpy as np
 from itertools import accumulate
+
+import numpy as np
+import rerun as rr
+
 #
 
 
@@ -11,7 +13,7 @@ def log_coordinate(
     radii=None,
     colors=[[255, 0, 0], [0, 255, 0], [0, 0, 255]],
     labels=["X", "Y", "Z"],
-    show_labels=None
+    show_labels=None,
 ):
     rr.log(
         entity_path,
@@ -21,9 +23,9 @@ def log_coordinate(
             radii=radii,
             colors=colors,
             labels=labels,
-            show_labels=show_labels
+            show_labels=show_labels,
         ),
-        static=True
+        static=True,
     )
 
 
@@ -33,7 +35,7 @@ def send_columns_path(
     ps: np.ndarray | list[np.ndarray],
     static=True,
     *args,
-    **kwargs
+    **kwargs,
 ):
     def _gen_path(ps: np.ndarray | list[np.ndarray]):
         paths = list(accumulate(ps, lambda acc, x: acc + [x], initial=[]))
@@ -43,15 +45,15 @@ def send_columns_path(
         rr.send_columns(
             entity_path,
             indexes=indexes,
-            columns=rr.LineStrips3D.columns(
-                strips=_gen_path(ps),
-                *args,
-                **kwargs
-            )
+            columns=rr.LineStrips3D.columns(strips=_gen_path(ps), *args, **kwargs),
         )
     else:
         rr.log(
             entity_path,
-            rr.LineStrips3D(strips=[ps], *args, **kwargs,),
-            static=True
+            rr.LineStrips3D(
+                strips=[ps],
+                *args,
+                **kwargs,
+            ),
+            static=True,
         )

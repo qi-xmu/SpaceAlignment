@@ -1,7 +1,7 @@
 import rerun as rr
 import rerun.blueprint as rrb
 
-from base.datatype import ARCoreData, CalibrationData, IMUData, RTABData, TimePoseSeries
+from base.datatype import ARCoreData, CalibrationData, IMUData, TimePoseSeries
 
 from . import log_coordinate, send_columns_path
 
@@ -61,11 +61,7 @@ def rerun_init(name: str):
     rr.log("/", rr.ViewCoordinates.RIGHT_HAND_Z_UP, static=True)
 
 
-def send_imu_cam_data(
-    imu_data: IMUData,
-    cam_data: ARCoreData | None = None,
-    cd_ic: CalibrationData = CalibrationData.identity(),
-):
+def send_imu_cam_data(imu_data: IMUData, cam_data: ARCoreData | None = None):
     ts_imu = rr.TimeColumn("timestamp", timestamp=imu_data.t_sys_us * 1e-6)
     rr.send_columns(
         "/gyroscope",
@@ -103,63 +99,13 @@ def send_imu_cam_data(
             ps=cam_data.sensor_ps,
             labels=["Sensor"],
         )
+    else:
+        pass
 
 
-def send_gt_data(gt_data: RTABData, calibr_data: CalibrationData):
-    times = rr.TimeColumn("timestamp", timestamp=gt_data.node_t_us * 1e-6)
-
-    rr.log(
-        "/world",
-        rr.Transform3D(
-            mat3x3=calibr_data.tf_global.rot.as_matrix(),
-            translation=calibr_data.tf_global.tran,
-        ),
-        static=True,
-    )
-
-    log_coordinate("/world/ahrs", length=0.1, show_labels=True, labels=["AHRS"])
-    qs = gt_data.node_rots.as_quat()
-    rr.send_columns(
-        "/world/groundtruth",
-        indexes=[times],
-        columns=rr.Transform3D.columns(quaternion=qs, translation=gt_data.node_ps),
-    )
-    rr.send_columns(
-        "/world/ahrs",
-        indexes=[times],
-        columns=rr.Transform3D.columns(translation=gt_data.node_ps),
-    )
-
-    send_columns_path(
-        "/world/gt_path",
-        indexes=[times],
-        ps=gt_data.node_ps,
-        static=True,
-        labels=["Groundtruth"],
-        colors=[[192, 72, 72]],
-    )
-
-    log_coordinate(
-        "/world/groundtruth/sensor",
-        length=0.1,
-        labels=["Estimate"],
-        show_labels=True,
-    )
-
-    tf_gs_local = calibr_data.tf_local.inverse()
-    rr.log(
-        "/world/groundtruth/sensor",
-        rr.Transform3D(
-            mat3x3=tf_gs_local.rot.as_matrix(), translation=tf_gs_local.tran
-        ),
-        static=True,
-    )
-
-
-def send_pose_data(ts: TimePoseSeries, calibr_data: CalibrationData):
+def send_pose_data(ts: TimePoseSeries, cd: CalibrationData):
     times = rr.TimeColumn("timestamp", timestamp=ts.t_us * 1e-6)
-
-    ts.transform_global(calibr_data.tf_global)
+    ts.transform_global(cd.tf_global)
 
     log_coordinate("/world/ahrs", length=0.1, show_labels=True, labels=["AHRS"])
     qs = ts.rots.as_quat()
@@ -190,7 +136,7 @@ def send_pose_data(ts: TimePoseSeries, calibr_data: CalibrationData):
         show_labels=True,
     )
 
-    tf_gs_local = calibr_data.tf_local.inverse()
+    tf_gs_local = cd.tf_local.inverse()
     rr.log(
         "/world/groundtruth/sensor",
         rr.Transform3D(

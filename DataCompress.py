@@ -1,8 +1,9 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """
 Module for compressing data.
 
 Author: qi
-License: MIT
 
 目前存在的问题：
 1. imu数据没有 t_sys_us 数据
@@ -178,9 +179,7 @@ def move_dir(src: Path, dst: Path) -> None:
 if __name__ == "__main__":
     args = DatasetArgsParser()
     args.parser.add_argument("--opt", action="store_true", help="使用优化后的数据")
-    args.parser.add_argument(
-        "-t", "--type", choices=["navio", "ruijie"], default="navio"
-    )
+    args.parser.add_argument("--type", choices=["navio", "ruijie"], default="navio")
     args.parse()
     assert args.output is not None
     type = args.args.type

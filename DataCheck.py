@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 import json
 
 import numpy as np
@@ -121,6 +123,8 @@ if __name__ == "__main__":
     dataset_path = args.dataset
     time_range = args.time_range
     visual = args.visual
+
+    print(time_range)
 
     def action(ud):
         DataChecker(

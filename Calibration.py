@@ -1,3 +1,6 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
 """Calibration.py 数据标定说明
 
 在稳定的场景下进行标定，确保 相机 和 激光雷达 正常稳定工作。
@@ -24,7 +27,8 @@ def main():
     using_cam = not args.args.no_using_cam
 
     if time_range[0] is None and time_range[1] is None:
-        raise ValueError("时间范围未指定")
+        time_range = (0, 50)
+        # raise ValueError("时间范围未指定")
 
     def action(ud: UnitData):
         if regen or not ud.calibr_path.exists():

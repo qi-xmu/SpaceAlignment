@@ -190,15 +190,10 @@ def calibrate_pose_series(
     if cs_c is not None:
         print("------------- 计算 Sensor - GT ")
         cd_cg = _calibrate_b1_b2(cs_c, cs_g, rot_only=False)
-        print("------------- 计算 AHRS - Sensor")
-        cd_ic = _calibrate_b1_b2(cs_i, cs_c, rot_only=True)
-        cd_sg = copy(cd_cg)
-        assert cd_ic.tf_global is not None
-        cd_sg.tf_global = cd_ic.tf_global * cd_cg.tf_global
-        return cd_sg, cd_ic
+        return cd_cg
     else:
         cd = _calibrate_b1_b2(cs_i, cs_g, rot_only=True)
-    return cd, CalibrationData.identity()
+    return cd
 
 
 def calibrate_unit(
@@ -225,16 +220,15 @@ def calibrate_unit(
         cs_c = cam_data.get_time_pose_series(time_range)
         notes = "使用相机"
 
-        cd, cd_ic = calibrate_pose_series(cs_i, cs_g, cs_c)
+        cd = calibrate_pose_series(cs_i, cs_g, cs_c)
         if using_rerun:
             rrec.rerun_init(ud.data_id)
             imu_data.transform_to_world()
-            rrec.send_imu_cam_data(imu_data, cam_data, cd_ic)
-            # rrec.send_gt_data(gt_data, cd)
+            rrec.send_imu_cam_data(imu_data, cam_data)
             rrec.send_pose_data(cs_g, cd)
     else:
         print("Not using Camera for calibration")
-        cd, _ = calibrate_pose_series(cs_i, cs_g)
+        cd = calibrate_pose_series(cs_i, cs_g)
         notes = "未使用相机，为标定位移"
         if using_rerun:
             rrec.rerun_init(ud.data_id)

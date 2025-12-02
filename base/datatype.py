@@ -50,6 +50,7 @@ class UnitData:
         self.is_calibr_data = "/Calibration" in self.base_dir.as_posix()
         if self.is_calibr_data:
             self.group_path = self.group_path.parent
+        self.person_path = self.group_path.parent
 
         # 标定文件
         self.unit_calib_path = self.base_dir.joinpath("Calibration.json")

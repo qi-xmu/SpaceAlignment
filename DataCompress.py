@@ -18,7 +18,14 @@ from pathlib import Path
 
 from base.action import dataset_action, dataset_action_pa  # noqa
 from base.args_parser import DatasetArgsParser
-from base.datatype import ARCoreData, IMUData, NavioDataset, RTABData, UnitData
+from base.datatype import (
+    ARCoreData,
+    GroupData,
+    IMUData,
+    NavioDataset,
+    RTABData,
+    UnitData,
+)
 
 """
 数据读取。
@@ -196,9 +203,11 @@ if __name__ == "__main__":
         ud.compress(tg, regen=regen, is_z_up=args.z_up, using_opt=args.args.opt)
 
     if args.unit is not None:
-        assert args.unit is not None
         ud = UnitData(args.unit)
         action(ud)
+    if args.group is not None:
+        gd = GroupData(args.group)
+        dataset_action(gd, action)
     elif args.dataset is not None:
         assert args.dataset is not None
         DatasetDicts = {"ruijie": RuijieDataset, "navio": NavioDataset}
